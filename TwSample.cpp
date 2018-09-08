@@ -42,7 +42,7 @@ int MainWindow;
 // This example displays one of the following shapes
 //typedef enum { SHAPE_TEAPOT=1, SHAPE_TORUS, SHAPE_CONE, BUNNY } Shape;
 
-#define NUM_SHAPES 4
+#define NUM_SHAPES 9
 //Shape g_CurrentShape = SHAPE_TORUS;
 int g_CurrentShape = 0;
 
@@ -140,7 +140,7 @@ const GLfloat AXES_WIDTH = { 3. };
 
 GLuint	BoxList = 100;		// object display list
 GLuint	AxesList = 101;		// list to hold the axes
-						
+
 int g_Axes = 1;   // Toggle Axes
 int g_Box = 0;    // Toggle Box
 
@@ -151,13 +151,13 @@ Polyhedron *poly = NULL;
 // ( input axis = float[3] angle = float  output: quat = float[4] )
 void SetQuaternionFromAxisAngle(const float *axis, float angle, float *quat)
 {
-    float sina2, norm;
-    sina2 = (float)sin(0.5f * angle);
-    norm = (float)sqrt(axis[0]*axis[0] + axis[1]*axis[1] + axis[2]*axis[2]);
-    quat[0] = sina2 * axis[0] / norm;
-    quat[1] = sina2 * axis[1] / norm;
-    quat[2] = sina2 * axis[2] / norm;
-    quat[3] = (float)cos(0.5f * angle);
+	float sina2, norm;
+	sina2 = (float)sin(0.5f * angle);
+	norm = (float)sqrt(axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]);
+	quat[0] = sina2 * axis[0] / norm;
+	quat[1] = sina2 * axis[1] / norm;
+	quat[2] = sina2 * axis[2] / norm;
+	quat[3] = (float)cos(0.5f * angle);
 }
 
 
@@ -165,29 +165,29 @@ void SetQuaternionFromAxisAngle(const float *axis, float angle, float *quat)
 // ( input: quat = float[4]  output: mat = float[4*4] )
 void ConvertQuaternionToMatrix(const float *quat, float *mat)
 {
-    float yy2 = 2.0f * quat[1] * quat[1];
-    float xy2 = 2.0f * quat[0] * quat[1];
-    float xz2 = 2.0f * quat[0] * quat[2];
-    float yz2 = 2.0f * quat[1] * quat[2];
-    float zz2 = 2.0f * quat[2] * quat[2];
-    float wz2 = 2.0f * quat[3] * quat[2];
-    float wy2 = 2.0f * quat[3] * quat[1];
-    float wx2 = 2.0f * quat[3] * quat[0];
-    float xx2 = 2.0f * quat[0] * quat[0];
-    mat[0*4+0] = - yy2 - zz2 + 1.0f;
-    mat[0*4+1] = xy2 + wz2;
-    mat[0*4+2] = xz2 - wy2;
-    mat[0*4+3] = 0;
-    mat[1*4+0] = xy2 - wz2;
-    mat[1*4+1] = - xx2 - zz2 + 1.0f;
-    mat[1*4+2] = yz2 + wx2;
-    mat[1*4+3] = 0;
-    mat[2*4+0] = xz2 + wy2;
-    mat[2*4+1] = yz2 - wx2;
-    mat[2*4+2] = - xx2 - yy2 + 1.0f;
-    mat[2*4+3] = 0;
-    mat[3*4+0] = mat[3*4+1] = mat[3*4+2] = 0;
-    mat[3*4+3] = 1;
+	float yy2 = 2.0f * quat[1] * quat[1];
+	float xy2 = 2.0f * quat[0] * quat[1];
+	float xz2 = 2.0f * quat[0] * quat[2];
+	float yz2 = 2.0f * quat[1] * quat[2];
+	float zz2 = 2.0f * quat[2] * quat[2];
+	float wz2 = 2.0f * quat[3] * quat[2];
+	float wy2 = 2.0f * quat[3] * quat[1];
+	float wx2 = 2.0f * quat[3] * quat[0];
+	float xx2 = 2.0f * quat[0] * quat[0];
+	mat[0 * 4 + 0] = -yy2 - zz2 + 1.0f;
+	mat[0 * 4 + 1] = xy2 + wz2;
+	mat[0 * 4 + 2] = xz2 - wy2;
+	mat[0 * 4 + 3] = 0;
+	mat[1 * 4 + 0] = xy2 - wz2;
+	mat[1 * 4 + 1] = -xx2 - zz2 + 1.0f;
+	mat[1 * 4 + 2] = yz2 + wx2;
+	mat[1 * 4 + 3] = 0;
+	mat[2 * 4 + 0] = xz2 + wy2;
+	mat[2 * 4 + 1] = yz2 - wx2;
+	mat[2 * 4 + 2] = -xx2 - yy2 + 1.0f;
+	mat[2 * 4 + 3] = 0;
+	mat[3 * 4 + 0] = mat[3 * 4 + 1] = mat[3 * 4 + 2] = 0;
+	mat[3 * 4 + 3] = 1;
 }
 
 
@@ -195,12 +195,12 @@ void ConvertQuaternionToMatrix(const float *quat, float *mat)
 // ( input q1 = float[4] q2 = float[4]  output: qout = float[4] )
 void MultiplyQuaternions(const float *q1, const float *q2, float *qout)
 {
-    float qr[4];
-	qr[0] = q1[3]*q2[0] + q1[0]*q2[3] + q1[1]*q2[2] - q1[2]*q2[1];
-	qr[1] = q1[3]*q2[1] + q1[1]*q2[3] + q1[2]*q2[0] - q1[0]*q2[2];
-	qr[2] = q1[3]*q2[2] + q1[2]*q2[3] + q1[0]*q2[1] - q1[1]*q2[0];
-	qr[3]  = q1[3]*q2[3] - (q1[0]*q2[0] + q1[1]*q2[1] + q1[2]*q2[2]);
-    qout[0] = qr[0]; qout[1] = qr[1]; qout[2] = qr[2]; qout[3] = qr[3];
+	float qr[4];
+	qr[0] = q1[3] * q2[0] + q1[0] * q2[3] + q1[1] * q2[2] - q1[2] * q2[1];
+	qr[1] = q1[3] * q2[1] + q1[1] * q2[3] + q1[2] * q2[0] - q1[0] * q2[2];
+	qr[2] = q1[3] * q2[2] + q1[2] * q2[3] + q1[0] * q2[1] - q1[1] * q2[0];
+	qr[3] = q1[3] * q2[3] - (q1[0] * q2[0] + q1[1] * q2[1] + q1[2] * q2[2]);
+	qout[0] = qr[0]; qout[1] = qr[1]; qout[2] = qr[2]; qout[3] = qr[3];
 }
 
 // Color space conversion function
@@ -217,7 +217,7 @@ HsvRgb(float hsv[3], float rgb[3])
 
 	h = hsv[0] / 60.;
 	while (h >= 6.)	h -= 6.;
-	while (h <  0.) 	h += 6.;
+	while (h < 0.) 	h += 6.;
 
 	s = hsv[1];
 	if (s < 0.)
@@ -286,10 +286,10 @@ HsvRgb(float hsv[3], float rgb[3])
 int GetTimeMs()
 {
 #if !defined(_WIN32)
-    return glutGet(GLUT_ELAPSED_TIME);
+	return glutGet(GLUT_ELAPSED_TIME);
 #else
-    // glutGet(GLUT_ELAPSED_TIME) seems buggy on Windows
-    return (int)GetTickCount(); 
+	// glutGet(GLUT_ELAPSED_TIME) seems buggy on Windows
+	return (int)GetTickCount();
 #endif
 }
 
@@ -452,19 +452,104 @@ InitAxesLists(void)
 	glEndList();
 }
 
+void Rainbow_color(float s, float s_max, float s_min, float rgb[3])
+{
+	float t = (s - s_min) / (s_max - s_min);
+	// make sure t is between 0 and 1, if not, rgb should be black
+	if (t < 0 || t>1) {
+		rgb[0] = rgb[1] = rgb[2] = 0.;
+		return;
+	}
+	float hsv[3] = { 1. };
+	// map the scalar value linearly to the hue channel of the HSV
+	hsv[0] = (1.0 - t) * 240;
+	hsv[1] = hsv[2] = 1.; // set the saturation and value as 1
+	// Call the HSV to RGB conversion function
+	HsvRgb(hsv, rgb);
+}
+
+void BWR_Divergent(float s, float s_max, float s_min, float rgb[3]) {
+	float s_mid = (s_max + s_min) / 2;
+	float t;
+	bool blue;
+	if (s >= s_min && s <= s_mid) {
+		t = (s - s_min) / (s_mid - s_min);
+		blue = true;
+	}
+	else if (s > s_mid && s <= s_max) {
+		t = (s - s_mid) / (s_max - s_mid);
+		blue = false;
+	}
+	else {
+		t = -1.;
+	}
+	if (t < 0 || t > 1) {
+		rgb[0] = rgb[1] = rgb[2] = 0.;
+		return;
+	}
+	float hsv[4];
+	hsv[2] = hsv[3] = 1.; // set value and alpha channel to 1
+	hsv[1] = t; // saturation will determine the intensity of the color
+	hsv[0] = 0.; // set hue to red by default
+	if (blue) {
+		hsv[1] = 1 - t; // blue goes from darkest to lightest
+		hsv[0] = 240; // set hue to 240
+	}
+	HsvRgb(hsv, rgb);
+}
+
+void HeatMap(float s, float s_max, float s_min, float rgb[3]) {
+	float t = (s - s_min) / (s_max - s_min);
+	if (t <= 0) {
+		rgb[0] = rgb[1] = rgb[2] = 0.; //This is the coldest hence black
+		return;
+	}
+	if (t >= 1) {
+		rgb[0] = rgb[1] = rgb[2] = 1.; // This is the hottest hence white
+		return;
+	}
+	// We follow the sequential R + G + B scale to get the heatmap color scheme.
+	// Since red needs to be full first before going to green, we therefore split the normalized scalar space into 3 equal parts,
+	// if the value is in the 1st part, then we know that we only need a shade of red. The intensity of red will depend on the 
+	// value of the scalar space.
+	// Since the space has been divided into 3 parts, no color value can be bigger than (1./3.) therefore we multiply the value 
+	// by 3 to scale it back to the normal color range. 
+	// If a color lies in the 2nd part, then we maximize red and carryforward the spillover to set green.
+	// We do similarly for blue
+	if (t > 1. / 3.) {
+		rgb[0] = 1.;
+		t -= (1. / 3.);
+	}
+	else {
+		rgb[0] = t * 3;
+		rgb[1] = rgb[2] = 0.;
+		return;
+	}
+	if (t > 1. / 3.) {
+		rgb[1] = 1.;
+		t -= (1. / 3.);
+	}
+	else {
+		rgb[1] = t * 3;
+		rgb[2] = 0.;
+		return;
+	}
+	rgb[2] = t * 3;
+}
+
 // Callback function called by GLUT to render screen
 void Display(void)
 {
-    float v[4]; // will be used to set light parameters
-    float mat[4*4]; // rotation matrix
+	float v[4]; // will be used to set light parameters
+	float mat[4 * 4]; // rotation matrix
 
-    // Clear frame buffer
-    glClearColor(0, 0, 0, 1);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	// Clear frame buffer
+	glClearColor(0, 0, 0, 1);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glEnable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-    glEnable(GL_NORMALIZE);
+	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_CULL_FACE);
+	glEnable(GL_NORMALIZE);
 
 	glEnable(GL_POLYGON_OFFSET_FILL);
 	glPolygonOffset(1., 1.);
@@ -472,127 +557,132 @@ void Display(void)
 	//glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 	glShadeModel(GL_SMOOTH);
 
-    // Set light
-    glEnable(GL_LIGHTING);
-    glEnable(GL_LIGHT0);
-    v[0] = v[1] = v[2] = g_LightMultiplier*0.4f; v[3] = 1.0f;
-    glLightfv(GL_LIGHT0, GL_AMBIENT, v);
-    v[0] = v[1] = v[2] = g_LightMultiplier*0.8f; v[3] = 1.0f;
-    glLightfv(GL_LIGHT0, GL_DIFFUSE, v);
-    v[0] = -g_LightDirection[0]; v[1] = -g_LightDirection[1]; v[2] = -g_LightDirection[2]; v[3] = 0.0f;
-    glLightfv(GL_LIGHT0, GL_POSITION, v);
+	// Set light
+	glEnable(GL_LIGHTING);
+	glEnable(GL_LIGHT0);
+	v[0] = v[1] = v[2] = g_LightMultiplier * 0.4f; v[3] = 1.0f;
+	glLightfv(GL_LIGHT0, GL_AMBIENT, v);
+	v[0] = v[1] = v[2] = g_LightMultiplier * 0.8f; v[3] = 1.0f;
+	glLightfv(GL_LIGHT0, GL_DIFFUSE, v);
+	v[0] = -g_LightDirection[0]; v[1] = -g_LightDirection[1]; v[2] = -g_LightDirection[2]; v[3] = 0.0f;
+	glLightfv(GL_LIGHT0, GL_POSITION, v);
 
-    // Set material
-    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, g_MatAmbient);
-    glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, g_MatDiffuse);
+	// Set material
+	glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, g_MatAmbient);
+	glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, g_MatDiffuse);
 
-    // Rotate and draw shape
-    glPushMatrix();
-    glTranslatef(0.5f, -0.3f, 0.0f);
-    if( g_AutoRotate ) 
-    {
-        float axis[3] = { 0, 1, 0 };
-        float angle = (float)(GetTimeMs()-g_RotateTime)/1000.0f;
-        float quat[4];
-        SetQuaternionFromAxisAngle(axis, angle, quat);
-        MultiplyQuaternions(g_RotateStart, quat, g_Rotation);
-    }
-    ConvertQuaternionToMatrix(g_Rotation, mat);
-    glMultMatrixf(mat);
-    glScalef(g_Zoom, g_Zoom, g_Zoom);
+	// Rotate and draw shape
+	glPushMatrix();
+	glTranslatef(0.5f, -0.3f, 0.0f);
+	if (g_AutoRotate)
+	{
+		float axis[3] = { 0, 1, 0 };
+		float angle = (float)(GetTimeMs() - g_RotateTime) / 1000.0f;
+		float quat[4];
+		SetQuaternionFromAxisAngle(axis, angle, quat);
+		MultiplyQuaternions(g_RotateStart, quat, g_Rotation);
+	}
+	ConvertQuaternionToMatrix(g_Rotation, mat);
+	glMultMatrixf(mat);
+	glScalef(g_Zoom, g_Zoom, g_Zoom);
 
 	// The draw function
-    //glCallList(g_CurrentShape);
+	//glCallList(g_CurrentShape);
 
 
 	// Draw the 3D object
-	glColor3fv(Colors[whichColor]);
+	// glColor3fv(Colors[whichColor]); // color the object
 	for (int i = 0; i < poly->ntris; i++) {
 		Triangle *temp_t = poly->tlist[i];
 		glBegin(GL_POLYGON);
-		for (int j = 0; j<3; j++) {
+		for (int j = 0; j < 3; j++) {
 			Vertex *temp_v = temp_t->verts[j];
 			glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-			//glColor3f(1.0, 1.0, 1.0);
-			glVertex3d(temp_v->x, temp_v->y, temp_v->z);
+			float rgb[3];
+			// glColor3f(1.0, 0.0, 1.0);
+			float x = temp_v->x;
+			float y = temp_v->y;
+			float z = temp_v->z;
+			HeatMap(sqrt(pow(x, 2) + pow(y, 2) + pow(z, 2)), 1.5, 0, rgb);
+			glColor3f(rgb[0], rgb[1], rgb[2]);
+			glVertex3d(x, y, z);
 		}
 		glEnd();
 	}
 
 	// Draw axes
-	if ( g_Axes )
-	    glCallList(AxesList);
-	
+	if (g_Axes)
+		glCallList(AxesList);
 
-    glPopMatrix();
 
-    // Draw tweak bars
-    TwDraw();
+	glPopMatrix();
 
-    // Present frame buffer
-    glutSwapBuffers();
+	// Draw tweak bars
+	TwDraw();
 
-    // Recall Display at next frame
-    glutPostRedisplay();
+	// Present frame buffer
+	glutSwapBuffers();
+
+	// Recall Display at next frame
+	glutPostRedisplay();
 }
-
 
 // Callback function called by GLUT when window size changes
 void Reshape(int width, int height)
 {
-    // Set OpenGL viewport and camera
-    glViewport(0, 0, width, height);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    gluPerspective(40, (double)width/height, 1, 10);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    gluLookAt(0,0,5, 0,0,0, 0,1,0);
-    glTranslatef(0, 0.6f, -1);
+	// Set OpenGL viewport and camera
+	glViewport(0, 0, width, height);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluPerspective(40, (double)width / height, 1, 10);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+	gluLookAt(0, 0, 5, 0, 0, 0, 0, 1, 0);
+	glTranslatef(0, 0.6f, -1);
 
-    // Send the new window size to AntTweakBar
-    TwWindowSize(width, height);
+	// Send the new window size to AntTweakBar
+	TwWindowSize(width, height);
 }
 
 
 // Function called at exit
 void Terminate(void)
-{ 
-    //glDeleteLists(SHAPE_TEAPOT, NUM_SHAPES);
+{
+	//glDeleteLists(SHAPE_TEAPOT, NUM_SHAPES);
 
-    TwTerminate();
+	TwTerminate();
 }
 
 
 //  Callback function called when the 'AutoRotate' variable value of the tweak bar has changed
 void TW_CALL SetAutoRotateCB(const void *value, void *clientData)
 {
-    (void)clientData; // unused
+	(void)clientData; // unused
 
-    g_AutoRotate = *(const int *)value; // copy value to g_AutoRotate
-    if( g_AutoRotate!=0 ) 
-    {
-        // init rotation
-        g_RotateTime = GetTimeMs();
-        g_RotateStart[0] = g_Rotation[0];
-        g_RotateStart[1] = g_Rotation[1];
-        g_RotateStart[2] = g_Rotation[2];
-        g_RotateStart[3] = g_Rotation[3];
+	g_AutoRotate = *(const int *)value; // copy value to g_AutoRotate
+	if (g_AutoRotate != 0)
+	{
+		// init rotation
+		g_RotateTime = GetTimeMs();
+		g_RotateStart[0] = g_Rotation[0];
+		g_RotateStart[1] = g_Rotation[1];
+		g_RotateStart[2] = g_Rotation[2];
+		g_RotateStart[3] = g_Rotation[3];
 
-        // make Rotation variable read-only
-        TwDefine(" TweakBar/ObjRotation readonly ");
-    }
-    else
-        // make Rotation variable read-write
-        TwDefine(" TweakBar/ObjRotation readwrite ");
+		// make Rotation variable read-only
+		TwDefine(" TweakBar/ObjRotation readonly ");
+	}
+	else
+		// make Rotation variable read-write
+		TwDefine(" TweakBar/ObjRotation readwrite ");
 }
 
 
 //  Callback function called by the tweak bar to get the 'AutoRotate' value
 void TW_CALL GetAutoRotateCB(void *value, void *clientData)
 {
-    (void)clientData; // unused
-    *(int *)value = g_AutoRotate; // copy g_AutoRotate to value
+	(void)clientData; // unused
+	*(int *)value = g_AutoRotate; // copy g_AutoRotate to value
 }
 
 
@@ -633,6 +723,25 @@ void TW_CALL loadNewObjCB(void *clientData)
 		strcpy(object_name, "torus");
 		break;
 
+	case 4:
+		strcpy(object_name, "torus_field");
+		break;
+
+	case 5:
+		strcpy(object_name, "iceland_current_field");
+		break;
+
+	case 6:
+		strcpy(object_name, "diesel_field1");
+		break;
+
+	case 7:
+		strcpy(object_name, "distance_field1");
+		break;
+
+	case 8:
+		strcpy(object_name, "distance_field2");
+		break;
 	}
 
 	poly->finalize();
@@ -708,7 +817,8 @@ void InitTwBar(TwBar *bar)
 	{
 		// ShapeEV associates Shape enum values with labels that will be displayed instead of enum values
 		//TwEnumVal shapeEV[NUM_SHAPES] = { { SHAPE_TEAPOT, "Teapot" },{ SHAPE_TORUS, "Torus" },{ SHAPE_CONE, "Cone" },{ BUNNY, "Bunny" } };
-		TwEnumVal shapeEV[NUM_SHAPES] = { { 0, "Bunny" }, { 1, "Feline" },{ 2, "Sphere" },{ 3, "Torus" } };
+		TwEnumVal shapeEV[NUM_SHAPES] = { { 0, "Bunny" }, { 1, "Feline" },{ 2, "Sphere" },{ 3, "Torus" },{ 4, "torus_field" },{ 5, "iceland_current_field" },
+		{ 6, "diesel_field1" },{ 7, "distance_field1" },{ 8, "distance_field2" } };
 
 		// Create a type for the enum shapeEV
 		TwType shapeType = TwDefineEnum("ShapeType", shapeEV, NUM_SHAPES);
@@ -740,43 +850,45 @@ void InitTwBar(TwBar *bar)
 // Main
 int main(int argc, char *argv[])
 {
-    TwBar *bar = NULL; // Pointer to the tweak bar
-    float axis[] = { 0.7f, 0.7f, 0.0f }; // initial model rotation
-    float angle = 0.8f;
+	TwBar *bar = NULL; // Pointer to the tweak bar
+	float axis[] = { 0.7f, 0.7f, 0.0f }; // initial model rotation
+	float angle = 0.8f;
 
-    // Initialize GLUT
-    glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
-    glutInitWindowSize(640, 480);
-	MainWindow = glutCreateWindow("Assignment 1 - Binoy Dalal");
-    glutCreateMenu(NULL);
+	// Initialize GLUT
+	glutInit(&argc, argv);
+	// First parameter is the buffer - single/double
+	// probably no noticeable difference between single and double
+	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+	glutInitWindowSize(1024, 768);
+	MainWindow = glutCreateWindow("Assignment 1 – Binoy Dalal");
+	glutCreateMenu(NULL);
 
-    // Set GLUT callbacks
-    glutDisplayFunc(Display);
-    glutReshapeFunc(Reshape);
-    atexit(Terminate);  // Called after glutMainLoop ends
+	// Set GLUT callbacks
+	glutDisplayFunc(Display); // Display is a function pointer - function contains info. about objects to be drawn on the screen
+	glutReshapeFunc(Reshape); // Reshape function tells how resizing the window will affect the graphics on screen
+	atexit(Terminate);  // Called after glutMainLoop ends
 
-    // Initialize AntTweakBar
-    TwInit(TW_OPENGL, NULL);
+	// Initialize AntTweakBar
+	TwInit(TW_OPENGL, NULL);
 
-    // Set GLUT event callbacks
-    // - Directly redirect GLUT mouse button events to AntTweakBar
-    glutMouseFunc((GLUTmousebuttonfun)TwEventMouseButtonGLUT);
-    // - Directly redirect GLUT mouse motion events to AntTweakBar
-    glutMotionFunc((GLUTmousemotionfun)TwEventMouseMotionGLUT);
-    // - Directly redirect GLUT mouse "passive" motion events to AntTweakBar (same as MouseMotion)
-    glutPassiveMotionFunc((GLUTmousemotionfun)TwEventMouseMotionGLUT);
-    // - Directly redirect GLUT key events to AntTweakBar
-    glutKeyboardFunc((GLUTkeyboardfun)TwEventKeyboardGLUT);
-    // - Directly redirect GLUT special key events to AntTweakBar
-    glutSpecialFunc((GLUTspecialfun)TwEventSpecialGLUT);
-    // - Send 'glutGetModifers' function pointer to AntTweakBar;
-    //   required because the GLUT key event functions do not report key modifiers states.
-    TwGLUTModifiersFunc(glutGetModifiers);
+	// Set GLUT event callbacks
+	// - Directly redirect GLUT mouse button events to AntTweakBar
+	glutMouseFunc((GLUTmousebuttonfun)TwEventMouseButtonGLUT);
+	// - Directly redirect GLUT mouse motion events to AntTweakBar
+	glutMotionFunc((GLUTmousemotionfun)TwEventMouseMotionGLUT);
+	// - Directly redirect GLUT mouse "passive" motion events to AntTweakBar (same as MouseMotion)
+	glutPassiveMotionFunc((GLUTmousemotionfun)TwEventMouseMotionGLUT);
+	// - Directly redirect GLUT key events to AntTweakBar
+	glutKeyboardFunc((GLUTkeyboardfun)TwEventKeyboardGLUT);
+	// - Directly redirect GLUT special key events to AntTweakBar
+	glutSpecialFunc((GLUTspecialfun)TwEventSpecialGLUT);
+	// - Send 'glutGetModifers' function pointer to AntTweakBar;
+	//   required because the GLUT key event functions do not report key modifiers states.
+	TwGLUTModifiersFunc(glutGetModifiers);
 
 
 	// Load the model and data here
-	FILE *this_file = fopen("./models/bunny.ply", "r");
+	FILE *this_file = fopen("./models/diesel_field1.ply", "r");
 	poly = new Polyhedron(this_file);
 	fclose(this_file);
 	poly->initialize(); // initialize everything
@@ -789,19 +901,26 @@ int main(int argc, char *argv[])
 
 	InitAxesLists();
 
-  	// Initialize the AntTweakBar interface
+	// Initialize the AntTweakBar interface
 
 	InitTwBar(bar);
-	
-    // Store time
-    g_RotateTime = GetTimeMs();
-    // Init rotation
-    SetQuaternionFromAxisAngle(axis, angle, g_Rotation);
-    SetQuaternionFromAxisAngle(axis, angle, g_RotateStart);
 
-    // Call the GLUT main loop
-    glutMainLoop();
+	// Store time
+	g_RotateTime = GetTimeMs();
+	// Init rotation
+	SetQuaternionFromAxisAngle(axis, angle, g_Rotation);
+	SetQuaternionFromAxisAngle(axis, angle, g_RotateStart);
 
-    return 0;
+	// Call the GLUT main loop
+	glutMainLoop(); // Constantly renders the object on screen
+
+	return 0;
 }
 
+/* myInit
+
+glClearColor(a,b,c,d) => first 3 parameters are the RGB colors and the 4th params is the opacity with 1 being completely opaque and 0 being completely transparent
+
+void myinit(void) {
+
+}*/
