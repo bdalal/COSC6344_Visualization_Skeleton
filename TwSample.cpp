@@ -519,25 +519,9 @@ void HeatMap(float s, float s_max, float s_min, float rgb[3]) {
 	// by 3 to scale it back to the normal color range. 
 	// If a color lies in the 2nd part, then we maximize red and carryforward the spillover to set green.
 	// We do similarly for blue
-	if (t > 1. / 3.) {
-		rgb[0] = 1.;
-		t -= (1. / 3.);
-	}
-	else {
-		rgb[0] = t * 3;
-		rgb[1] = rgb[2] = 0.;
-		return;
-	}
-	if (t > 1. / 3.) {
-		rgb[1] = 1.;
-		t -= (1. / 3.);
-	}
-	else {
-		rgb[1] = t * 3;
-		rgb[2] = 0.;
-		return;
-	}
-	rgb[2] = t * 3;
+	 rgb[0] = 3 * max(t, 0);
+	 rgb[1] = 3 * max(t-(1./3.), 0);
+	 rgb[2] = 3 * max(t-(2./3.), 0);
 }
 
 // Callback function called by GLUT to render screen
