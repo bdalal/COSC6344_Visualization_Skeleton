@@ -79,7 +79,7 @@ const GLfloat Colors[7][3] =
 	{ 1., 0., 1. },		// magenta
 	{ 1., 1., 1. },		// white
 };
-#define NUM_COLORS 10
+#define NUM_COLORS 11
 int whichColor = 0;
 
 // the stroke characters 'X' 'Y' 'Z' :
@@ -603,7 +603,6 @@ void Display(void)
 				Vertex *temp_v = temp_t->verts[j];
 				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
 				float rgb[3];
-				// glColor3f(1.0, 0.0, 1.0);
 				float x = temp_v->x;
 				float y = temp_v->y;
 				float z = temp_v->z;
@@ -612,7 +611,6 @@ void Display(void)
 			glEnd();
 		}
 	}
-
 	if (whichColor == 7) {
 		for (int i = 0; i < poly->ntris; i++) {
 			Triangle *temp_t = poly->tlist[i];
@@ -625,7 +623,7 @@ void Display(void)
 				float x = temp_v->x;
 				float y = temp_v->y;
 				float z = temp_v->z;
-				BWR_Divergent(sqrt(pow(x, 2) + pow(y, 2) + pow(z, 2)), 1.5, 0, rgb);
+				Rainbow_color(sqrt(pow(x, 2) + pow(y, 2) + pow(z, 2)), 1.5, 0, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
@@ -644,7 +642,7 @@ void Display(void)
 				float x = temp_v->x;
 				float y = temp_v->y;
 				float z = temp_v->z;
-				HeatMap(sqrt(pow(x, 2) + pow(y, 2) + pow(z, 2)), 1.5, 0, rgb);
+				BWR_Divergent(sqrt(pow(x, 2) + pow(y, 2) + pow(z, 2)), 1.5, 0, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
@@ -652,6 +650,25 @@ void Display(void)
 		}
 	}
 	if (whichColor == 9) {
+		for (int i = 0; i < poly->ntris; i++) {
+			Triangle *temp_t = poly->tlist[i];
+			glBegin(GL_POLYGON);
+			for (int j = 0; j < 3; j++) {
+				Vertex *temp_v = temp_t->verts[j];
+				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
+				float rgb[3];
+				// glColor3f(1.0, 0.0, 1.0);
+				float x = temp_v->x;
+				float y = temp_v->y;
+				float z = temp_v->z;
+				HeatMap(sqrt(pow(x, 2) + pow(y, 2) + pow(z, 2)), 1.5, 0, rgb);
+				glColor3f(rgb[0], rgb[1], rgb[2]);
+				glVertex3d(x, y, z);
+			}
+			glEnd();
+		}
+	}
+	if (whichColor == 10) {
 		for (int i = 0; i < poly->ntris; i++) {
 			Triangle *temp_t = poly->tlist[i];
 			glBegin(GL_POLYGON);
@@ -879,7 +896,7 @@ void InitTwBar(TwBar *bar)
 
 	// Add the enum variable 'whichColor' to 'bar' 
 	{
-		TwEnumVal ColorEV[NUM_COLORS] = { {0, "red"}, {1, "yellow"}, {2, "green"}, {3, "cyan"}, {4, "blue"}, {5, "magenta"},  {6, "white"}, {7, "Blue-White-Red"}, {8, "Heat map"}, {9, "Discrete"} };
+		TwEnumVal ColorEV[NUM_COLORS] = { {0, "red"}, {1, "yellow"}, {2, "green"}, {3, "cyan"}, {4, "blue"}, {5, "magenta"},  {6, "white"}, {7, "Rainbow"}, {8, "Blue-White-Red"}, {9, "Heat map"}, {10, "Discrete"} };
 		// Create a type for the enum ColorEV
 		TwType ColorType = TwDefineEnum("ColoType", ColorEV, NUM_COLORS);
 
@@ -961,11 +978,3 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
-
-/* myInit
-
-glClearColor(a,b,c,d) => first 3 parameters are the RGB colors and the 4th params is the opacity with 1 being completely opaque and 0 being completely transparent
-
-void myinit(void) {
-
-}*/
