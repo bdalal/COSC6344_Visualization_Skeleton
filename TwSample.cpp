@@ -524,6 +524,21 @@ void HeatMap(float s, float s_max, float s_min, float rgb[3]) {
 	 rgb[2] = 3 * max(t-(2./3.), 0);
 }
 
+void Discrete(float s, float s_max, float s_min, float rgb[3]) {
+	int t = floor((s - s_min) / (s_max - s_min) * 10);
+	if (t >= 0 && t <= 5) {
+		rgb[0] = Colors[t][0];
+		rgb[1] = Colors[t][1];
+		rgb[2] = Colors[t][2];
+		return;
+	}
+	if (t < 0) {
+		rgb[0] = rgb[1] = rgb[2] = 0.;
+		return;
+	}
+	rgb[0] = rgb[1] = rgb[2] = 1.;
+}
+
 // Callback function called by GLUT to render screen
 void Display(void)
 {
@@ -664,7 +679,7 @@ void Display(void)
 				float x = temp_v->x;
 				float y = temp_v->y;
 				float z = temp_v->z;
-				HeatMap(sqrt(pow(x, 2) + pow(y, 2) + pow(z, 2)), 1.5, 0, rgb);
+				Discrete(sqrt(pow(x, 2) + pow(y, 2) + pow(z, 2)), 1.5, 0, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
