@@ -45,7 +45,7 @@ int MainWindow;
 // This example displays one of the following shapes
 //typedef enum { SHAPE_TEAPOT=1, SHAPE_TORUS, SHAPE_CONE, BUNNY } Shape;
 
-#define NUM_SHAPES 9
+#define NUM_SHAPES 5
 //Shape g_CurrentShape = SHAPE_TORUS;
 int g_CurrentShape = 0;
 
@@ -707,42 +707,26 @@ void TW_CALL GetAxesCB(void *value, void *clientData)
 
 void TW_CALL loadNewObjCB(void *clientData)
 {
-	char object_name[128] = "bunny";
+	char object_name[128] = "torus_field";
 
 	switch (g_CurrentShape) {
 	case 0:
-		strcpy(object_name, "bunny");
-		break;
-
-	case 1:
-		strcpy(object_name, "feline");
-		break;
-
-	case 2:
-		strcpy(object_name, "sphere");
-		break;
-
-	case 3:
-		strcpy(object_name, "torus");
-		break;
-
-	case 4:
 		strcpy(object_name, "torus_field");
 		break;
 
-	case 5:
+	case 1:
 		strcpy(object_name, "iceland_current_field");
 		break;
 
-	case 6:
+	case 2:
 		strcpy(object_name, "diesel_field1");
 		break;
 
-	case 7:
+	case 3:
 		strcpy(object_name, "distance_field1");
 		break;
 
-	case 8:
+	case 4:
 		strcpy(object_name, "distance_field2");
 		break;
 	}
@@ -820,8 +804,8 @@ void InitTwBar(TwBar *bar)
 	{
 		// ShapeEV associates Shape enum values with labels that will be displayed instead of enum values
 		//TwEnumVal shapeEV[NUM_SHAPES] = { { SHAPE_TEAPOT, "Teapot" },{ SHAPE_TORUS, "Torus" },{ SHAPE_CONE, "Cone" },{ BUNNY, "Bunny" } };
-		TwEnumVal shapeEV[NUM_SHAPES] = { { 0, "Bunny" }, { 1, "Feline" },{ 2, "Sphere" },{ 3, "Torus" },{ 4, "torus_field" },{ 5, "iceland_current_field" },
-		{ 6, "diesel_field1" },{ 7, "distance_field1" },{ 8, "distance_field2" } };
+		
+		TwEnumVal shapeEV[NUM_SHAPES] = { { 0, "torus_field" },{ 1, "iceland_current_field" },{ 2, "diesel_field1" },{ 3, "distance_field1" },{ 4, "distance_field2" } };
 
 		// Create a type for the enum shapeEV
 		TwType shapeType = TwDefineEnum("ShapeType", shapeEV, NUM_SHAPES);
@@ -891,7 +875,7 @@ int main(int argc, char *argv[])
 
 
 	// Load the model and data here
-	FILE *this_file = fopen("./models/diesel_field1.ply", "r");
+	FILE *this_file = fopen("./models/torus_field.ply", "r");
 	poly = new Polyhedron(this_file);
 	fclose(this_file);
 	poly->initialize(); // initialize everything
