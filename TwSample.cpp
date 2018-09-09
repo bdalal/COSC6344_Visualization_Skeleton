@@ -23,6 +23,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <string>
+#include <sstream>
 
 #if defined(_WIN32) || defined(_WIN64)
 //  MiniGLUT.h is provided to avoid the need of having GLUT installed to 
@@ -63,6 +65,12 @@ float g_MatDiffuse[] = { 1.0f, 1.0f, 0.0f, 1.0f };
 // Light parameter
 float g_LightMultiplier = 1.0f;
 float g_LightDirection[] = { -0.57735f, -0.57735f, -0.57735f };
+float s_min = 0.0003629999999;
+float s_max = 1.0000000000000;
+float s_mid = (s_min + s_max) / 2;
+// White threshold
+float g_WhiteThreshold = s_mid;
+TwBar *bar = NULL; // Pointer to the tweak bar
 
 
 
@@ -79,7 +87,7 @@ const GLfloat Colors[7][3] =
 	{ 1., 0., 1. },		// magenta
 	{ 1., 1., 1. },		// white
 };
-#define NUM_COLORS 11
+#define NUM_COLORS 12
 int whichColor = 0;
 
 // the stroke characters 'X' 'Y' 'Z' :
@@ -471,8 +479,8 @@ void Rainbow_color(float s, float s_max, float s_min, float rgb[3])
 	HsvRgb(hsv, rgb);
 }
 
-void BWR_Divergent(float s, float s_max, float s_min, float rgb[3]) {
-	float s_mid = (s_max + s_min) / 2;
+void BWR_Divergent(float s, float s_max, float s_mid, float s_min, float rgb[3]) {
+	// float s_mid = (s_max + s_min) / 2;
 	float t;
 	bool blue;
 	if (s >= s_min && s <= s_mid) {
@@ -539,6 +547,14 @@ void Discrete(float s, float s_max, float s_min, float rgb[3]) {
 	rgb[0] = rgb[1] = rgb[2] = 1.;
 }
 
+void QuadraticBezier(float s, float s_max, float s_min, float rgb[3]) {
+	float t = (s - s_min) / (s_max - s_min);
+	float hsv[4];
+	hsv[1] = hsv[2] = hsv[3] = 1.;
+	hsv[0] = ((1 - t) * (((1 - t) * s_min) + (t * s)) + (t * (((1 - t) * s) + (t * s_max)))) * 100;
+	HsvRgb(hsv, rgb);
+}
+
 // Callback function called by GLUT to render screen
 void Display(void)
 {
@@ -591,8 +607,7 @@ void Display(void)
 	// The draw function
 	//glCallList(g_CurrentShape);
 
-	// TODO find s_max and s_min
-	float s_max, s_min;
+	/*float s_max, s_min;
 	s_max = s_min = poly->tlist[0]->verts[0]->s;
 	for (int i = 0; i < poly->ntris; i++) {
 		Triangle *temp_t = poly->tlist[i];
@@ -604,7 +619,7 @@ void Display(void)
 			if (s < s_min)
 				s_min = s;
 		}
-	}
+	}*/
 
 	// Draw the 3D object
 	if (whichColor < 7) { // Standard AntTweakBar colors
@@ -657,7 +672,7 @@ void Display(void)
 				float y = temp_v->y;
 				float z = temp_v->z;
 				float s = temp_v->s;
-				BWR_Divergent(s, s_max, s_min, rgb);
+				BWR_Divergent(s, s_max, g_WhiteThreshold, s_min, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
@@ -698,6 +713,26 @@ void Display(void)
 				float z = temp_v->z;
 				float s = temp_v->s;
 				Discrete(s, s_max, s_min, rgb);
+				glColor3f(rgb[0], rgb[1], rgb[2]);
+				glVertex3d(x, y, z);
+			}
+			glEnd();
+		}
+	}
+	if (whichColor == 11) { // Non-linear scheme - QuadraticBezier
+		for (int i = 0; i < poly->ntris; i++) {
+			Triangle *temp_t = poly->tlist[i];
+			glBegin(GL_POLYGON);
+			for (int j = 0; j < 3; j++) {
+				Vertex *temp_v = temp_t->verts[j];
+				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
+				float rgb[3];
+				// glColor3f(1.0, 0.0, 1.0);
+				float x = temp_v->x;
+				float y = temp_v->y;
+				float z = temp_v->z;
+				float s = temp_v->s;
+				QuadraticBezier(s, s_max, s_min, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
@@ -838,6 +873,33 @@ void TW_CALL loadNewObjCB(void *clientData)
 
 	poly->initialize(); // initialize everything
 
+	// remove bar
+	int success = TwRemoveVar(bar, " WhiteThreshold ");
+	const char* error;
+	if (success == 0)
+		error = TwGetLastError();
+	// recompute smin and smax and smid
+	s_max = s_min = poly->tlist[0]->verts[0]->s;
+	for (int i = 0; i < poly->ntris; i++) {
+		Triangle *temp_t = poly->tlist[i];
+		for (int j = 0; j < 3; j++) {
+			Vertex *temp_v = temp_t->verts[j];
+			float s = temp_v->s;
+			if (s > s_max)
+				s_max = s;
+			if (s < s_min)
+				s_min = s;
+		}
+	}
+	s_mid = (s_min + s_max) / 2;
+	g_WhiteThreshold = s_mid;
+	// add bar with default as smid
+	std::string str = " label = 'Adjust white threshold' min=" + std::to_string(s_min) + " max=" + std::to_string(s_max) + " step=" + 
+		std::to_string(s_mid/100) + " keyIncr = 'w' keyDecr = 's' help='Increase/decrease white threshold' ";
+
+	const char* def = str.c_str();
+	TwAddVarRW(bar, " WhiteThreshold ", TW_TYPE_FLOAT, &g_WhiteThreshold, def);
+
 	poly->calc_bounding_sphere();
 	poly->calc_face_normals_and_area();
 	poly->average_normals();
@@ -847,12 +909,12 @@ void TW_CALL loadNewObjCB(void *clientData)
 }
 
 
-void InitTwBar(TwBar *bar)
+void InitTwBar()
 {
 	// Create a tweak bar
 	bar = TwNewBar("TweakBar");
 	TwDefine(" GLOBAL help='This example shows how to integrate AntTweakBar with GLUT and OpenGL.' "); // Message added to the help bar.
-	TwDefine(" TweakBar size='200 500' color='0 128 255' alpha=128  "); // change default tweak bar size and color
+	TwDefine(" TweakBar size='200 800' color='0 128 255' alpha=128  "); // change default tweak bar size and color
 	TwDefine(" TweakBar  label='Visual Parameters'");        // change the title of the Tweakbar
 
 	// Add callback to toggle reference axes (callback functions are defined above).
@@ -913,7 +975,8 @@ void InitTwBar(TwBar *bar)
 
 	// Add the enum variable 'whichColor' to 'bar' 
 	{
-		TwEnumVal ColorEV[NUM_COLORS] = { {0, "red"}, {1, "yellow"}, {2, "green"}, {3, "cyan"}, {4, "blue"}, {5, "magenta"},  {6, "white"}, {7, "Rainbow"}, {8, "Blue-White-Red"}, {9, "Heat map"}, {10, "Discrete"} };
+		TwEnumVal ColorEV[NUM_COLORS] = { {0, "red"}, {1, "yellow"}, {2, "green"}, {3, "cyan"}, {4, "blue"}, {5, "magenta"},  {6, "white"}, {7, "Rainbow"}, {8, "Blue-White-Red"}, 
+		{9, "Heat map"}, {10, "Discrete"}, {11, "Quadratic Bezier"} };
 		// Create a type for the enum ColorEV
 		TwType ColorType = TwDefineEnum("ColoType", ColorEV, NUM_COLORS);
 
@@ -921,6 +984,9 @@ void InitTwBar(TwBar *bar)
 		TwAddVarRW(bar, "Object colors", ColorType, &whichColor, " help='Change object color.' ");
 	}
 
+	// Add an option for user to input the value for white threshold
+	TwAddVarRW(bar, " WhiteThreshold ", TW_TYPE_FLOAT, &g_WhiteThreshold,
+		" label='Adjust white threshold' min=0.0003629999999 max=1.0000000000000 step=0.01 keyIncr='w' keyDecr='s' help='Increase/decrease white threshold' ");
 }
 
 
@@ -929,7 +995,6 @@ void InitTwBar(TwBar *bar)
 // Main
 int main(int argc, char *argv[])
 {
-	TwBar *bar = NULL; // Pointer to the tweak bar
 	float axis[] = { 0.7f, 0.7f, 0.0f }; // initial model rotation
 	float angle = 0.8f;
 
@@ -982,7 +1047,7 @@ int main(int argc, char *argv[])
 
 	// Initialize the AntTweakBar interface
 
-	InitTwBar(bar);
+	InitTwBar();
 
 	// Store time
 	g_RotateTime = GetTimeMs();
