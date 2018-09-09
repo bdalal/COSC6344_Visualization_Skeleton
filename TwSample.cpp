@@ -516,7 +516,7 @@ void HeatMap(float s, float s_max, float s_min, float rgb[3]) {
 	// if the value is in the 1st part, then we know that we only need a shade of red. The intensity of red will depend on the 
 	// value of the scalar space.
 	// Since the space has been divided into 3 parts, no color value can be bigger than (1./3.) therefore we multiply the value 
-	// by 3 to scale it back to the normal color range. 
+	// by 3 to scale it back to the normal color range of 0 - 1. 
 	// If a color lies in the 2nd part, then we maximize red and carryforward the spillover to set green.
 	// We do similarly for blue
 	 rgb[0] = 3 * max(t, 0);
@@ -591,9 +591,10 @@ void Display(void)
 	// The draw function
 	//glCallList(g_CurrentShape);
 
+	// TODO find s_max and s_min
 
 	// Draw the 3D object
-	if (whichColor < 7) {
+	if (whichColor < 7) { // Standard AntTweakBar colors
 		glColor3fv(Colors[whichColor]); // color the object
 		for (int i = 0; i < poly->ntris; i++) {
 			Triangle *temp_t = poly->tlist[i];
@@ -610,7 +611,7 @@ void Display(void)
 			glEnd();
 		}
 	}
-	if (whichColor == 7) {
+	if (whichColor == 7) { // Rainbow scheme
 		for (int i = 0; i < poly->ntris; i++) {
 			Triangle *temp_t = poly->tlist[i];
 			glBegin(GL_POLYGON);
@@ -622,14 +623,15 @@ void Display(void)
 				float x = temp_v->x;
 				float y = temp_v->y;
 				float z = temp_v->z;
-				Rainbow_color(sqrt(pow(x, 2) + pow(y, 2) + pow(z, 2)), 1.5, 0, rgb);
+				float s = temp_v->s;
+				Rainbow_color(s, 1.5, 0, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
 			glEnd();
 		}
 	}
-	if (whichColor == 8) {
+	if (whichColor == 8) { //  BWR Divergent scheme
 		for (int i = 0; i < poly->ntris; i++) {
 			Triangle *temp_t = poly->tlist[i];
 			glBegin(GL_POLYGON);
@@ -641,14 +643,15 @@ void Display(void)
 				float x = temp_v->x;
 				float y = temp_v->y;
 				float z = temp_v->z;
-				BWR_Divergent(sqrt(pow(x, 2) + pow(y, 2) + pow(z, 2)), 1.5, 0, rgb);
+				float s = temp_v->s;
+				BWR_Divergent(s, 1.5, 0, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
 			glEnd();
 		}
 	}
-	if (whichColor == 9) {
+	if (whichColor == 9) { // HeatMap scheme
 		for (int i = 0; i < poly->ntris; i++) {
 			Triangle *temp_t = poly->tlist[i];
 			glBegin(GL_POLYGON);
@@ -660,14 +663,15 @@ void Display(void)
 				float x = temp_v->x;
 				float y = temp_v->y;
 				float z = temp_v->z;
-				HeatMap(sqrt(pow(x, 2) + pow(y, 2) + pow(z, 2)), 1.5, 0, rgb);
+				float s = temp_v->s;
+				HeatMap(s, 1.5, 0, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
 			glEnd();
 		}
 	}
-	if (whichColor == 10) {
+	if (whichColor == 10) { // Discrete scheme
 		for (int i = 0; i < poly->ntris; i++) {
 			Triangle *temp_t = poly->tlist[i];
 			glBegin(GL_POLYGON);
@@ -679,7 +683,8 @@ void Display(void)
 				float x = temp_v->x;
 				float y = temp_v->y;
 				float z = temp_v->z;
-				Discrete(sqrt(pow(x, 2) + pow(y, 2) + pow(z, 2)), 1.5, 0, rgb);
+				float s = temp_v->s;
+				Discrete(s, 1.5, 0, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
