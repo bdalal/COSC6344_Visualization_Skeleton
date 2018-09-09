@@ -592,6 +592,19 @@ void Display(void)
 	//glCallList(g_CurrentShape);
 
 	// TODO find s_max and s_min
+	float s_max, s_min;
+	s_max = s_min = poly->tlist[0]->verts[0]->s;
+	for (int i = 0; i < poly->ntris; i++) {
+		Triangle *temp_t = poly->tlist[i];
+		for (int j = 0; j < 3; j++) {
+			Vertex *temp_v = temp_t->verts[j];
+			float s = temp_v->s;
+			if (s > s_max)
+				s_max = s;
+			if (s < s_min)
+				s_min = s;
+		}
+	}
 
 	// Draw the 3D object
 	if (whichColor < 7) { // Standard AntTweakBar colors
@@ -624,7 +637,7 @@ void Display(void)
 				float y = temp_v->y;
 				float z = temp_v->z;
 				float s = temp_v->s;
-				Rainbow_color(s, 1.5, 0, rgb);
+				Rainbow_color(s, s_max, s_min, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
@@ -644,7 +657,7 @@ void Display(void)
 				float y = temp_v->y;
 				float z = temp_v->z;
 				float s = temp_v->s;
-				BWR_Divergent(s, 1.5, 0, rgb);
+				BWR_Divergent(s, s_max, s_min, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
@@ -664,7 +677,7 @@ void Display(void)
 				float y = temp_v->y;
 				float z = temp_v->z;
 				float s = temp_v->s;
-				HeatMap(s, 1.5, 0, rgb);
+				HeatMap(s, s_max, s_min, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
@@ -684,7 +697,7 @@ void Display(void)
 				float y = temp_v->y;
 				float z = temp_v->z;
 				float s = temp_v->s;
-				Discrete(s, 1.5, 0, rgb);
+				Discrete(s, s_max, s_min, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}

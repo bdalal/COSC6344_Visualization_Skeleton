@@ -99,6 +99,10 @@ Polyhedron::Polyhedron(FILE *file)
         /* copy info from the "vert" structure */
         vlist[j] = new Vertex (vert.x, vert.y, vert.z);
         vlist[j]->other_props = vert.other_props;
+		vlist[j]->s = vert.s;
+		vlist[j]->vx = vert.vx;
+		vlist[j]->vy = vert.vy;
+		vlist[j]->vz = vert.vz;
       }
     }
     else if (equal_strings ("face", elem_name)) {
