@@ -477,6 +477,7 @@ void Rainbow_color(float s, float s_max, float s_min, float rgb[3])
 	HsvRgb(hsv, rgb);
 }
 
+//Q 3.1
 void BWR_Divergent(float s, float s_max, float s_mid, float s_min, float rgb[3]) {
 	// float s_mid = (s_max + s_min) / 2;
 	float t;
@@ -507,6 +508,7 @@ void BWR_Divergent(float s, float s_max, float s_mid, float s_min, float rgb[3])
 	HsvRgb(hsv, rgb);
 }
 
+// Q 3.1
 void HeatMap(float s, float s_max, float s_min, float rgb[3]) {
 	float t = (s - s_min) / (s_max - s_min);
 	if (t <= 0) {
@@ -530,6 +532,7 @@ void HeatMap(float s, float s_max, float s_min, float rgb[3]) {
 	 rgb[2] = 3 * max(t-(2./3.), 0);
 }
 
+// Q 3.2
 void Discrete(float s, float s_max, float s_min, float rgb[3]) {
 	int t = floor((s - s_min) / (s_max - s_min) * 10);
 	if (t >= 0 && t <= 5) {
@@ -545,6 +548,7 @@ void Discrete(float s, float s_max, float s_min, float rgb[3]) {
 	rgb[0] = rgb[1] = rgb[2] = 1.;
 }
 
+// Q 3.3b
 void NonLinearExtremes(float s, float s_max, float s_min, float rgb[3]) {
 	float t = (s - s_min) / (s_max - s_min);
 	float hsv[4];
@@ -553,6 +557,7 @@ void NonLinearExtremes(float s, float s_max, float s_min, float rgb[3]) {
 	HsvRgb(hsv, rgb);
 }
 
+// Q 3.3a
 void calcWhiteThreshold() {
 	s_max = s_min = poly->tlist[0]->verts[0]->s;
 	for (int i = 0; i < poly->ntris; i++) {
@@ -874,6 +879,7 @@ void TW_CALL loadNewObjCB(void *clientData)
 
 	poly->initialize(); // initialize everything
 
+	// Q 3.3a
 	// remove bar
 	TwRemoveVar(bar, " WhiteThreshold ");
 	// recompute smin and smax and smid
