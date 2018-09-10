@@ -553,7 +553,7 @@ void NonLinearExtremes(float s, float s_max, float s_min, float rgb[3]) {
 	float t = (s - s_min) / (s_max - s_min);
 	float hsv[4];
 	hsv[1] = hsv[2] = hsv[3] = 1.;
-	hsv[0] = t * (1 - t) * 240;
+	hsv[0] = (1 - t) * (1 - t) * 240;
 	HsvRgb(hsv, rgb);
 }
 
