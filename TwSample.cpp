@@ -65,11 +65,9 @@ float g_MatDiffuse[] = { 1.0f, 1.0f, 0.0f, 1.0f };
 // Light parameter
 float g_LightMultiplier = 1.0f;
 float g_LightDirection[] = { -0.57735f, -0.57735f, -0.57735f };
-float s_min = 0.0003629999999;
-float s_max = 1.0000000000000;
-float s_mid = (s_min + s_max) / 2;
+float s_min, s_max, s_mid;
 // White threshold
-float g_WhiteThreshold = s_mid;
+float g_WhiteThreshold;
 TwBar *bar = NULL; // Pointer to the tweak bar
 
 
@@ -547,12 +545,29 @@ void Discrete(float s, float s_max, float s_min, float rgb[3]) {
 	rgb[0] = rgb[1] = rgb[2] = 1.;
 }
 
-void QuadraticBezier(float s, float s_max, float s_min, float rgb[3]) {
+void NonLinearExtremes(float s, float s_max, float s_min, float rgb[3]) {
 	float t = (s - s_min) / (s_max - s_min);
 	float hsv[4];
 	hsv[1] = hsv[2] = hsv[3] = 1.;
-	hsv[0] = ((1 - t) * (((1 - t) * s_min) + (t * s)) + (t * (((1 - t) * s) + (t * s_max)))) * 100;
+	hsv[0] = t * (1 - t) * 240;
 	HsvRgb(hsv, rgb);
+}
+
+void calcWhiteThreshold() {
+	s_max = s_min = poly->tlist[0]->verts[0]->s;
+	for (int i = 0; i < poly->ntris; i++) {
+		Triangle *temp_t = poly->tlist[i];
+		for (int j = 0; j < 3; j++) {
+			Vertex *temp_v = temp_t->verts[j];
+			float s = temp_v->s;
+			if (s > s_max)
+				s_max = s;
+			if (s < s_min)
+				s_min = s;
+		}
+	}
+	s_mid = (s_min + s_max) / 2;
+	g_WhiteThreshold = s_mid;
 }
 
 // Callback function called by GLUT to render screen
@@ -606,20 +621,6 @@ void Display(void)
 
 	// The draw function
 	//glCallList(g_CurrentShape);
-
-	/*float s_max, s_min;
-	s_max = s_min = poly->tlist[0]->verts[0]->s;
-	for (int i = 0; i < poly->ntris; i++) {
-		Triangle *temp_t = poly->tlist[i];
-		for (int j = 0; j < 3; j++) {
-			Vertex *temp_v = temp_t->verts[j];
-			float s = temp_v->s;
-			if (s > s_max)
-				s_max = s;
-			if (s < s_min)
-				s_min = s;
-		}
-	}*/
 
 	// Draw the 3D object
 	if (whichColor < 7) { // Standard AntTweakBar colors
@@ -732,7 +733,7 @@ void Display(void)
 				float y = temp_v->y;
 				float z = temp_v->z;
 				float s = temp_v->s;
-				QuadraticBezier(s, s_max, s_min, rgb);
+				NonLinearExtremes(s, s_max, s_min, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
@@ -874,29 +875,12 @@ void TW_CALL loadNewObjCB(void *clientData)
 	poly->initialize(); // initialize everything
 
 	// remove bar
-	int success = TwRemoveVar(bar, " WhiteThreshold ");
-	const char* error;
-	if (success == 0)
-		error = TwGetLastError();
+	TwRemoveVar(bar, " WhiteThreshold ");
 	// recompute smin and smax and smid
-	s_max = s_min = poly->tlist[0]->verts[0]->s;
-	for (int i = 0; i < poly->ntris; i++) {
-		Triangle *temp_t = poly->tlist[i];
-		for (int j = 0; j < 3; j++) {
-			Vertex *temp_v = temp_t->verts[j];
-			float s = temp_v->s;
-			if (s > s_max)
-				s_max = s;
-			if (s < s_min)
-				s_min = s;
-		}
-	}
-	s_mid = (s_min + s_max) / 2;
-	g_WhiteThreshold = s_mid;
+	calcWhiteThreshold();
 	// add bar with default as smid
 	std::string str = " label = 'Adjust white threshold' min=" + std::to_string(s_min) + " max=" + std::to_string(s_max) + " step=" + 
 		std::to_string(s_mid/100) + " keyIncr = 'w' keyDecr = 's' help='Increase/decrease white threshold' ";
-
 	const char* def = str.c_str();
 	TwAddVarRW(bar, " WhiteThreshold ", TW_TYPE_FLOAT, &g_WhiteThreshold, def);
 
@@ -976,7 +960,7 @@ void InitTwBar()
 	// Add the enum variable 'whichColor' to 'bar' 
 	{
 		TwEnumVal ColorEV[NUM_COLORS] = { {0, "red"}, {1, "yellow"}, {2, "green"}, {3, "cyan"}, {4, "blue"}, {5, "magenta"},  {6, "white"}, {7, "Rainbow"}, {8, "Blue-White-Red"}, 
-		{9, "Heat map"}, {10, "Discrete"}, {11, "Quadratic Bezier"} };
+		{9, "Heat map"}, {10, "Discrete"}, {11, "NonLinear - Extremes"} };
 		// Create a type for the enum ColorEV
 		TwType ColorType = TwDefineEnum("ColoType", ColorEV, NUM_COLORS);
 
@@ -984,9 +968,13 @@ void InitTwBar()
 		TwAddVarRW(bar, "Object colors", ColorType, &whichColor, " help='Change object color.' ");
 	}
 
-	// Add an option for user to input the value for white threshold
-	TwAddVarRW(bar, " WhiteThreshold ", TW_TYPE_FLOAT, &g_WhiteThreshold,
-		" label='Adjust white threshold' min=0.0003629999999 max=1.0000000000000 step=0.01 keyIncr='w' keyDecr='s' help='Increase/decrease white threshold' ");
+	// calculate white threshold for the default object - torus
+	calcWhiteThreshold();
+	// add bar with default as smid
+	std::string str = " label = 'Adjust white threshold' min=" + std::to_string(s_min) + " max=" + std::to_string(s_max) + " step=" +
+		std::to_string(s_mid / 100) + " keyIncr = 'w' keyDecr = 's' help='Increase/decrease white threshold' ";
+	const char* def = str.c_str(); 
+	TwAddVarRW(bar, " WhiteThreshold ", TW_TYPE_FLOAT, &g_WhiteThreshold, def);
 }
 
 
