@@ -67,9 +67,7 @@ float g_LightMultiplier = 1.0f;
 float g_LightDirection[] = { -0.57735f, -0.57735f, -0.57735f };
 float s_min, s_max, s_mid;
 // White threshold
-float g_WhiteThreshold;
-TwBar *bar = NULL; // Pointer to the tweak bar
-
+float g_WhiteThreshold = 0.5;
 
 
 // some sample color definitions:
@@ -461,7 +459,7 @@ InitAxesLists(void)
 	glEndList();
 }
 
-void Rainbow_color(float s, float s_max, float s_min, float rgb[3])
+void Rainbow_color(float s, float rgb[3])
 {
 	float t = (s - s_min) / (s_max - s_min);
 	// make sure t is between 0 and 1, if not, rgb should be black
@@ -478,38 +476,53 @@ void Rainbow_color(float s, float s_max, float s_min, float rgb[3])
 }
 
 //Q 3.1
-void BWR_Divergent(float s, float s_max, float s_mid, float s_min, float rgb[3]) {
-	// float s_mid = (s_max + s_min) / 2;
-	float t;
-	bool blue;
-	if (s >= s_min && s <= s_mid) {
-		t = (s - s_min) / (s_mid - s_min);
-		blue = true;
-	}
-	else if (s > s_mid && s <= s_max) {
-		t = (s - s_mid) / (s_max - s_mid);
-		blue = false;
+//void BWR_Divergent(float s, float rgb[3]) {
+//	// float s_mid = (s_max + s_min) / 2;
+//	float t;
+//	bool blue;
+//	if (s >= s_min && s <= s_mid) {
+//		t = (s - s_min) / (s_mid - s_min);
+//		blue = true;
+//	}
+//	else if (s > s_mid && s <= s_max) {
+//		t = (s - s_mid) / (s_max - s_mid);
+//		blue = false;
+//	}
+//	else {
+//		t = -1.;
+//	}
+//	if (t < 0 || t > 1) {
+//		rgb[0] = rgb[1] = rgb[2] = 0.;
+//		return;
+//	}
+//	float hsv[4];
+//	hsv[2] = hsv[3] = 1.; // set value and alpha channel to 1
+//	hsv[1] = t; // saturation will determine the intensity of the color
+//	hsv[0] = 0.; // set hue to red by default
+//	if (blue) {
+//		hsv[1] = 1 - t; // blue goes from darkest to lightest
+//		hsv[0] = 240; // set hue to 240
+//	}
+//	HsvRgb(hsv, rgb);
+//}
+
+void BWR_Divergent(float s, float rgb[3]) {
+	float t = (s - s_min) / (s_max - s_min);
+	float hsv[4];
+	hsv[2] = hsv[3] = 1;
+	if (t <= g_WhiteThreshold) {
+		hsv[0] = 240;
+		hsv[1] = 1 - ((1 / g_WhiteThreshold) * t);
 	}
 	else {
-		t = -1.;
-	}
-	if (t < 0 || t > 1) {
-		rgb[0] = rgb[1] = rgb[2] = 0.;
-		return;
-	}
-	float hsv[4];
-	hsv[2] = hsv[3] = 1.; // set value and alpha channel to 1
-	hsv[1] = t; // saturation will determine the intensity of the color
-	hsv[0] = 0.; // set hue to red by default
-	if (blue) {
-		hsv[1] = 1 - t; // blue goes from darkest to lightest
-		hsv[0] = 240; // set hue to 240
+		hsv[0] = 0;
+		hsv[1] = ((1 / g_WhiteThreshold) * t) - 1;
 	}
 	HsvRgb(hsv, rgb);
 }
 
 // Q 3.1
-void HeatMap(float s, float s_max, float s_min, float rgb[3]) {
+void HeatMap(float s, float rgb[3]) {
 	float t = (s - s_min) / (s_max - s_min);
 	if (t <= 0) {
 		rgb[0] = rgb[1] = rgb[2] = 0.; //This is the coldest hence black
@@ -527,13 +540,15 @@ void HeatMap(float s, float s_max, float s_min, float rgb[3]) {
 	// by 3 to scale it back to the normal color range of 0 - 1. 
 	// If a color lies in the 2nd part, then we maximize red and carryforward the spillover to set green.
 	// We do similarly for blue
-	 rgb[0] = 3 * max(t, 0);
-	 rgb[1] = 3 * max(t-(1./3.), 0);
-	 rgb[2] = 3 * max(t-(2./3.), 0);
+	 rgb[0] = min((3 * max(t, 0)), 1); // 3 * (min(t, 1/3))
+	 rgb[1] = min((3 * max(t-(1./3.), 0)), 1); // 3 * (min(t-1/3, 1/3))
+	 rgb[2] = min((3 * max(t-(2./3.), 0)), 1); // 3 * (min(t-2/3, 1/3))
 }
 
+//TODO Interface to move data range
+
 // Q 3.2
-void Discrete(float s, float s_max, float s_min, float rgb[3]) {
+void Discrete(float s, float rgb[3]) {
 	int t = floor((s - s_min) / (s_max - s_min) * 10);
 	if (t >= 0 && t <= 5) {
 		rgb[0] = Colors[t][0];
@@ -549,7 +564,7 @@ void Discrete(float s, float s_max, float s_min, float rgb[3]) {
 }
 
 // Q 3.3b
-void NonLinearExtremes(float s, float s_max, float s_min, float rgb[3]) {
+void NonLinearExtremes(float s, float rgb[3]) {
 	float t = (s - s_min) / (s_max - s_min);
 	float hsv[4];
 	hsv[1] = hsv[2] = hsv[3] = 1.;
@@ -558,7 +573,7 @@ void NonLinearExtremes(float s, float s_max, float s_min, float rgb[3]) {
 }
 
 // Q 3.3a
-void calcWhiteThreshold() {
+void calcLimits() {
 	s_max = s_min = poly->tlist[0]->verts[0]->s;
 	for (int i = 0; i < poly->ntris; i++) {
 		Triangle *temp_t = poly->tlist[i];
@@ -571,8 +586,8 @@ void calcWhiteThreshold() {
 				s_min = s;
 		}
 	}
-	s_mid = (s_min + s_max) / 2;
-	g_WhiteThreshold = s_mid;
+	/*s_mid = (s_min + s_max) / 2;*/
+	/*g_WhiteThreshold = s_mid;*/
 }
 
 // Callback function called by GLUT to render screen
@@ -594,6 +609,7 @@ void Display(void)
 
 	//glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 	glShadeModel(GL_SMOOTH);
+	//glShadeModel(GL_FLAT);
 
 	// Set light
 	glEnable(GL_LIGHTING);
@@ -636,7 +652,6 @@ void Display(void)
 			for (int j = 0; j < 3; j++) {
 				Vertex *temp_v = temp_t->verts[j];
 				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-				float rgb[3];
 				float x = temp_v->x;
 				float y = temp_v->y;
 				float z = temp_v->z;
@@ -658,7 +673,7 @@ void Display(void)
 				float y = temp_v->y;
 				float z = temp_v->z;
 				float s = temp_v->s;
-				Rainbow_color(s, s_max, s_min, rgb);
+				Rainbow_color(s, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
@@ -678,7 +693,7 @@ void Display(void)
 				float y = temp_v->y;
 				float z = temp_v->z;
 				float s = temp_v->s;
-				BWR_Divergent(s, s_max, g_WhiteThreshold, s_min, rgb);
+				BWR_Divergent(s, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
@@ -698,7 +713,7 @@ void Display(void)
 				float y = temp_v->y;
 				float z = temp_v->z;
 				float s = temp_v->s;
-				HeatMap(s, s_max, s_min, rgb);
+				HeatMap(s, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
@@ -718,7 +733,7 @@ void Display(void)
 				float y = temp_v->y;
 				float z = temp_v->z;
 				float s = temp_v->s;
-				Discrete(s, s_max, s_min, rgb);
+				Discrete(s, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
@@ -738,7 +753,7 @@ void Display(void)
 				float y = temp_v->y;
 				float z = temp_v->z;
 				float s = temp_v->s;
-				NonLinearExtremes(s, s_max, s_min, rgb);
+				NonLinearExtremes(s, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
@@ -875,21 +890,12 @@ void TW_CALL loadNewObjCB(void *clientData)
 	FILE *this_file = fopen(tmp_str, "r");
 	poly = new Polyhedron(this_file);
 	fclose(this_file);
-
-
+	
 	poly->initialize(); // initialize everything
 
-	// Q 3.3a
-	// remove bar
-	TwRemoveVar(bar, " WhiteThreshold ");
-	// recompute smin and smax and smid
-	calcWhiteThreshold();
-	// add bar with default as smid
-	std::string str = " label = 'Adjust white threshold' min=" + std::to_string(s_min) + " max=" + std::to_string(s_max) + " step=" + 
-		std::to_string(s_mid/100) + " keyIncr = 'w' keyDecr = 's' help='Increase/decrease white threshold' ";
-	const char* def = str.c_str();
-	TwAddVarRW(bar, " WhiteThreshold ", TW_TYPE_FLOAT, &g_WhiteThreshold, def);
-
+	// Q 3.3a	
+	calcLimits(); // calc s_max and s_min for the new objects
+	
 	poly->calc_bounding_sphere();
 	poly->calc_face_normals_and_area();
 	poly->average_normals();
@@ -899,7 +905,7 @@ void TW_CALL loadNewObjCB(void *clientData)
 }
 
 
-void InitTwBar()
+void InitTwBar(TwBar *bar)
 {
 	// Create a tweak bar
 	bar = TwNewBar("TweakBar");
@@ -975,12 +981,9 @@ void InitTwBar()
 	}
 
 	// calculate white threshold for the default object - torus
-	calcWhiteThreshold();
-	// add bar with default as smid
-	std::string str = " label = 'Adjust white threshold' min=" + std::to_string(s_min) + " max=" + std::to_string(s_max) + " step=" +
-		std::to_string(s_mid / 100) + " keyIncr = 'w' keyDecr = 's' help='Increase/decrease white threshold' ";
-	const char* def = str.c_str(); 
-	TwAddVarRW(bar, " WhiteThreshold ", TW_TYPE_FLOAT, &g_WhiteThreshold, def);
+
+	TwAddVarRW(bar, "WhiteThreshold", TW_TYPE_FLOAT, &g_WhiteThreshold, 
+		" label = 'Adjust white threshold' min=0 max=1 step=0.01 keyIncr = 'w' keyDecr = 's' help='Increase/decrease white threshold' ");
 }
 
 
@@ -989,6 +992,8 @@ void InitTwBar()
 // Main
 int main(int argc, char *argv[])
 {
+	TwBar *bar = NULL; // Pointer to the tweak bar
+
 	float axis[] = { 0.7f, 0.7f, 0.0f }; // initial model rotation
 	float angle = 0.8f;
 
@@ -1031,6 +1036,8 @@ int main(int argc, char *argv[])
 	fclose(this_file);
 	poly->initialize(); // initialize everything
 
+	calcLimits(); // calculate s_max and s_min for the default figure
+
 	poly->calc_bounding_sphere();
 	poly->calc_face_normals_and_area();
 	poly->average_normals();
@@ -1041,7 +1048,7 @@ int main(int argc, char *argv[])
 
 	// Initialize the AntTweakBar interface
 
-	InitTwBar();
+	InitTwBar(bar);
 
 	// Store time
 	g_RotateTime = GetTimeMs();
