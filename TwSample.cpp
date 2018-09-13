@@ -547,6 +547,7 @@ void HeatMap(float s, float rgb[3]) {
 
 //TODO Interface to move data range
 
+
 // Q 3.2
 void Discrete(float s, float rgb[3]) {
 	int t = floor((s - s_min) / (s_max - s_min) * 10);
@@ -564,11 +565,11 @@ void Discrete(float s, float rgb[3]) {
 }
 
 // Q 3.3b
-void NonLinearExtremes(float s, float rgb[3]) {
-	float t = (s - s_min) / (s_max - s_min);
+void NonLinear(float s, float rgb[3]) {
+	float t = (sqrt(s) - sqrt(s_min)) / (sqrt(s_max) - sqrt(s_min));
 	float hsv[4];
 	hsv[1] = hsv[2] = hsv[3] = 1.;
-	hsv[0] = (1 - t) * (1 - t) * 240;
+	hsv[0] = (1 - t) * 240;
 	HsvRgb(hsv, rgb);
 }
 
@@ -668,7 +669,6 @@ void Display(void)
 				Vertex *temp_v = temp_t->verts[j];
 				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
 				float rgb[3];
-				// glColor3f(1.0, 0.0, 1.0);
 				float x = temp_v->x;
 				float y = temp_v->y;
 				float z = temp_v->z;
@@ -688,7 +688,6 @@ void Display(void)
 				Vertex *temp_v = temp_t->verts[j];
 				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
 				float rgb[3];
-				// glColor3f(1.0, 0.0, 1.0);
 				float x = temp_v->x;
 				float y = temp_v->y;
 				float z = temp_v->z;
@@ -708,7 +707,6 @@ void Display(void)
 				Vertex *temp_v = temp_t->verts[j];
 				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
 				float rgb[3];
-				// glColor3f(1.0, 0.0, 1.0);
 				float x = temp_v->x;
 				float y = temp_v->y;
 				float z = temp_v->z;
@@ -728,7 +726,6 @@ void Display(void)
 				Vertex *temp_v = temp_t->verts[j];
 				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
 				float rgb[3];
-				// glColor3f(1.0, 0.0, 1.0);
 				float x = temp_v->x;
 				float y = temp_v->y;
 				float z = temp_v->z;
@@ -740,7 +737,7 @@ void Display(void)
 			glEnd();
 		}
 	}
-	if (whichColor == 11) { // Non-linear scheme - QuadraticBezier
+	if (whichColor == 11) { // Non-linear scheme
 		for (int i = 0; i < poly->ntris; i++) {
 			Triangle *temp_t = poly->tlist[i];
 			glBegin(GL_POLYGON);
@@ -748,12 +745,11 @@ void Display(void)
 				Vertex *temp_v = temp_t->verts[j];
 				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
 				float rgb[3];
-				// glColor3f(1.0, 0.0, 1.0);
 				float x = temp_v->x;
 				float y = temp_v->y;
 				float z = temp_v->z;
 				float s = temp_v->s;
-				NonLinearExtremes(s, rgb);
+				NonLinear(s, rgb);
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex3d(x, y, z);
 			}
@@ -895,6 +891,7 @@ void TW_CALL loadNewObjCB(void *clientData)
 
 	// Q 3.3a	
 	calcLimits(); // calc s_max and s_min for the new objects
+	g_WhiteThreshold = 0.5; // reset g_WhiteThreshold
 	
 	poly->calc_bounding_sphere();
 	poly->calc_face_normals_and_area();
