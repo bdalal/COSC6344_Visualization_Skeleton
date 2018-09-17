@@ -23,8 +23,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
-#include <string>
-#include <sstream>
+#include <vector>
+
 
 #if defined(_WIN32) || defined(_WIN64)
 //  MiniGLUT.h is provided to avoid the need of having GLUT installed to 
@@ -47,7 +47,7 @@ int MainWindow;
 // This example displays one of the following shapes
 //typedef enum { SHAPE_TEAPOT=1, SHAPE_TORUS, SHAPE_CONE, BUNNY } Shape;
 
-#define NUM_SHAPES 5
+#define NUM_SHAPES 7
 //Shape g_CurrentShape = SHAPE_TORUS;
 int g_CurrentShape = 0;
 
@@ -68,6 +68,8 @@ float g_LightDirection[] = { -0.57735f, -0.57735f, -0.57735f };
 float s_min, s_max, s_mid;
 // White threshold
 float g_WhiteThreshold = 0.5;
+
+bool isPoly = true;
 
 
 // some sample color definitions:
@@ -153,6 +155,107 @@ int g_Box = 0;    // Toggle Box
 
 #include "Skeleton.h"
 Polyhedron *poly = NULL;
+
+// To read from dat files
+typedef struct node
+{
+	float x, y, z, s;
+};
+typedef struct lineseg
+{
+	int n1, n2;
+};
+typedef struct quad
+{
+	int verts[4];
+	int edges[4];
+};
+int NX, NY;
+std::vector<node> grid_pts;
+std::vector<lineseg> edgeList;
+std::vector<quad> quadList;
+
+void Load_data_on_uniformGrids(const char *name)
+{
+	int i;
+	FILE *fp = fopen(name, "r");
+	if (fp == NULL) return;
+	fscanf(fp, "%d %d\n", &NX, &NY);
+	grid_pts.clear();
+	for (i = 0; i < NX*NY; i++)
+	{
+		node tmp;
+		fscanf(fp, "%f, %f, %f, %f \n", &tmp.x, &tmp.y, &tmp.z, &tmp.s);
+		grid_pts.push_back(tmp);
+	}
+	fclose(fp);
+}
+
+void build_edge_list() {
+	int i, j;
+	int cur = 0;
+	edgeList.clear();
+	for (j = 0; j < NY - 1; j++) {
+		cur = j * NX;
+		for (i = cur; i < cur + NX - 1; i++) {
+			// TODO: build horizontal edge between vertex i and i + 1
+			lineseg edge1;
+			edge1.n1 = i;
+			edge1.n2 = i + 1;
+			// TODO: build vertical edge between vertex i and i + NX
+			lineseg edge2;
+			edge2.n1 = i;
+			edge2.n2 = i + NX;
+
+			edgeList.push_back(edge1);
+			edgeList.push_back(edge2);
+		}
+		//TODO: build right most edge between vertex cur and cur + NX - vertical edge
+		lineseg rightedge;
+		rightedge.n1 = cur + NX - 1;
+		rightedge.n2 = cur + NX + NX - 1;
+		edgeList.push_back(rightedge);
+	}
+	// build edges on the top boundary
+	cur = (NY - 1) * NX;
+	for (i = 0; i < NX - 1; i++) {
+		//TODO build horizontal edge between vertex i and i+1
+		lineseg topedge;
+		topedge.n1 = i + cur;
+		topedge.n2 = i + cur + 1;
+		edgeList.push_back(topedge);
+	}
+}
+
+void build_face_list() {
+	int i, j;
+	int cur = 0;
+	quadList.clear();
+	for (j = 0; j < NY - 1; j++) {
+		cur = j * NX;
+		for (i = cur; i < cur + NX - 1; i++) {
+			quad face;
+			// TODO: find the 4 vertices (indices) to form the quad
+			face.verts[0] = i;
+			face.verts[1] = i + 1;
+			face.verts[2] = i + 1 + NX;
+			face.verts[3] = i + NX;
+			// TODO: find the 4 edges (indices) to form the quad. There could be multiple scenarios!
+			face.edges[0] = (2 * i) - j;
+			face.edges[3] = (2 * i) - j + 1;
+			if (i == cur + NX - 2) // we're at the rightmost face
+				face.edges[1] = (2 * i) - j + 2;
+			else
+				face.edges[1] = (2 * i) - j + 3;
+			if (i >= (NY - 2) * NX) // we're at the topmost face
+				face.edges[2] = i + NX + cur + 1;
+			else
+				face.edges[2] = (2 * i) - j + 3 + NX;
+			quadList.push_back(face);
+		}
+	}
+}
+
 
 // Routine to set a quaternion from a rotation axis and angle
 // ( input axis = float[3] angle = float  output: quat = float[4] )
@@ -575,20 +678,30 @@ void NonLinear(float s, float rgb[3]) {
 
 // Q 3.3a
 void calcLimits() {
-	s_max = s_min = poly->tlist[0]->verts[0]->s;
-	for (int i = 0; i < poly->ntris; i++) {
-		Triangle *temp_t = poly->tlist[i];
-		for (int j = 0; j < 3; j++) {
-			Vertex *temp_v = temp_t->verts[j];
-			float s = temp_v->s;
-			if (s > s_max)
-				s_max = s;
-			if (s < s_min)
-				s_min = s;
+	if (isPoly) {
+		s_max = s_min = poly->tlist[0]->verts[0]->s;
+		for (int i = 0; i < poly->ntris; i++) {
+			Triangle *temp_t = poly->tlist[i];
+			for (int j = 0; j < 3; j++) {
+				Vertex *temp_v = temp_t->verts[j];
+				float s = temp_v->s;
+				if (s > s_max)
+					s_max = s;
+				if (s < s_min)
+					s_min = s;
+			}
 		}
 	}
-	/*s_mid = (s_min + s_max) / 2;*/
-	/*g_WhiteThreshold = s_mid;*/
+	else {
+		s_max = s_min = grid_pts[0].s;
+		for (int i = 1; i < NX * NY; i++) {
+			float s_temp = grid_pts[i].s;
+			if (s_temp < s_min)
+				s_min = s_temp;
+			if (s_temp > s_max)
+				s_max = s_temp;
+		}
+	}
 }
 
 // Callback function called by GLUT to render screen
@@ -645,115 +758,131 @@ void Display(void)
 	//glCallList(g_CurrentShape);
 
 	// Draw the 3D object
-	if (whichColor < 7) { // Standard AntTweakBar colors
-		glColor3fv(Colors[whichColor]); // color the object
-		for (int i = 0; i < poly->ntris; i++) {
-			Triangle *temp_t = poly->tlist[i];
-			glBegin(GL_POLYGON);
-			for (int j = 0; j < 3; j++) {
-				Vertex *temp_v = temp_t->verts[j];
-				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-				float x = temp_v->x;
-				float y = temp_v->y;
-				float z = temp_v->z;
-				glVertex3d(x, y, z);
+	if (!isPoly) {
+		for (int i = 0; i < quadList.size(); i++) {
+			quad face = quadList[i];
+			glBegin(GL_QUADS);
+			float rgb[3];
+			for (int j = 0; j < 4; j++) {
+				node temp = grid_pts[face.verts[j]];
+				Rainbow_color(temp.s, rgb);
+				glColor3f(rgb[0], rgb[1], rgb[2]);
+				glVertex3f(temp.x, temp.y, temp.z);
 			}
 			glEnd();
 		}
 	}
-	if (whichColor == 7) { // Rainbow scheme
-		for (int i = 0; i < poly->ntris; i++) {
-			Triangle *temp_t = poly->tlist[i];
-			glBegin(GL_POLYGON);
-			for (int j = 0; j < 3; j++) {
-				Vertex *temp_v = temp_t->verts[j];
-				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-				float rgb[3];
-				float x = temp_v->x;
-				float y = temp_v->y;
-				float z = temp_v->z;
-				float s = temp_v->s;
-				Rainbow_color(s, rgb);
-				glColor3f(rgb[0], rgb[1], rgb[2]);
-				glVertex3d(x, y, z);
+	else {
+		if (whichColor < 7) { // Standard AntTweakBar colors
+			glColor3fv(Colors[whichColor]); // color the object
+			for (int i = 0; i < poly->ntris; i++) {
+				Triangle *temp_t = poly->tlist[i];
+				glBegin(GL_POLYGON);
+				for (int j = 0; j < 3; j++) {
+					Vertex *temp_v = temp_t->verts[j];
+					glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
+					float x = temp_v->x;
+					float y = temp_v->y;
+					float z = temp_v->z;
+					glVertex3d(x, y, z);
+				}
+				glEnd();
 			}
-			glEnd();
 		}
-	}
-	if (whichColor == 8) { //  BWR Divergent scheme
-		for (int i = 0; i < poly->ntris; i++) {
-			Triangle *temp_t = poly->tlist[i];
-			glBegin(GL_POLYGON);
-			for (int j = 0; j < 3; j++) {
-				Vertex *temp_v = temp_t->verts[j];
-				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-				float rgb[3];
-				float x = temp_v->x;
-				float y = temp_v->y;
-				float z = temp_v->z;
-				float s = temp_v->s;
-				BWR_Divergent(s, rgb);
-				glColor3f(rgb[0], rgb[1], rgb[2]);
-				glVertex3d(x, y, z);
+		if (whichColor == 7) { // Rainbow scheme
+			for (int i = 0; i < poly->ntris; i++) {
+				Triangle *temp_t = poly->tlist[i];
+				glBegin(GL_POLYGON);
+				for (int j = 0; j < 3; j++) {
+					Vertex *temp_v = temp_t->verts[j];
+					glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
+					float rgb[3];
+					float x = temp_v->x;
+					float y = temp_v->y;
+					float z = temp_v->z;
+					float s = temp_v->s;
+					Rainbow_color(s, rgb);
+					glColor3f(rgb[0], rgb[1], rgb[2]);
+					glVertex3d(x, y, z);
+				}
+				glEnd();
 			}
-			glEnd();
 		}
-	}
-	if (whichColor == 9) { // HeatMap scheme
-		for (int i = 0; i < poly->ntris; i++) {
-			Triangle *temp_t = poly->tlist[i];
-			glBegin(GL_POLYGON);
-			for (int j = 0; j < 3; j++) {
-				Vertex *temp_v = temp_t->verts[j];
-				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-				float rgb[3];
-				float x = temp_v->x;
-				float y = temp_v->y;
-				float z = temp_v->z;
-				float s = temp_v->s;
-				HeatMap(s, rgb);
-				glColor3f(rgb[0], rgb[1], rgb[2]);
-				glVertex3d(x, y, z);
+		if (whichColor == 8) { //  BWR Divergent scheme
+			for (int i = 0; i < poly->ntris; i++) {
+				Triangle *temp_t = poly->tlist[i];
+				glBegin(GL_POLYGON);
+				for (int j = 0; j < 3; j++) {
+					Vertex *temp_v = temp_t->verts[j];
+					glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
+					float rgb[3];
+					float x = temp_v->x;
+					float y = temp_v->y;
+					float z = temp_v->z;
+					float s = temp_v->s;
+					BWR_Divergent(s, rgb);
+					glColor3f(rgb[0], rgb[1], rgb[2]);
+					glVertex3d(x, y, z);
+				}
+				glEnd();
 			}
-			glEnd();
 		}
-	}
-	if (whichColor == 10) { // Discrete scheme
-		for (int i = 0; i < poly->ntris; i++) {
-			Triangle *temp_t = poly->tlist[i];
-			glBegin(GL_POLYGON);
-			for (int j = 0; j < 3; j++) {
-				Vertex *temp_v = temp_t->verts[j];
-				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-				float rgb[3];
-				float x = temp_v->x;
-				float y = temp_v->y;
-				float z = temp_v->z;
-				float s = temp_v->s;
-				Discrete(s, rgb);
-				glColor3f(rgb[0], rgb[1], rgb[2]);
-				glVertex3d(x, y, z);
+		if (whichColor == 9) { // HeatMap scheme
+			for (int i = 0; i < poly->ntris; i++) {
+				Triangle *temp_t = poly->tlist[i];
+				glBegin(GL_POLYGON);
+				for (int j = 0; j < 3; j++) {
+					Vertex *temp_v = temp_t->verts[j];
+					glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
+					float rgb[3];
+					float x = temp_v->x;
+					float y = temp_v->y;
+					float z = temp_v->z;
+					float s = temp_v->s;
+					HeatMap(s, rgb);
+					glColor3f(rgb[0], rgb[1], rgb[2]);
+					glVertex3d(x, y, z);
+				}
+				glEnd();
 			}
-			glEnd();
 		}
-	}
-	if (whichColor == 11) { // Non-linear scheme
-		for (int i = 0; i < poly->ntris; i++) {
-			Triangle *temp_t = poly->tlist[i];
-			glBegin(GL_POLYGON);
-			for (int j = 0; j < 3; j++) {
-				Vertex *temp_v = temp_t->verts[j];
-				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-				float rgb[3];
-				float x = temp_v->x;
-				float y = temp_v->y;
-				float z = temp_v->z;
-				float s = temp_v->s;
-				NonLinear(s, rgb);
-				glColor3f(rgb[0], rgb[1], rgb[2]);
-				glVertex3d(x, y, z);
+		if (whichColor == 10) { // Discrete scheme
+			for (int i = 0; i < poly->ntris; i++) {
+				Triangle *temp_t = poly->tlist[i];
+				glBegin(GL_POLYGON);
+				for (int j = 0; j < 3; j++) {
+					Vertex *temp_v = temp_t->verts[j];
+					glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
+					float rgb[3];
+					float x = temp_v->x;
+					float y = temp_v->y;
+					float z = temp_v->z;
+					float s = temp_v->s;
+					Discrete(s, rgb);
+					glColor3f(rgb[0], rgb[1], rgb[2]);
+					glVertex3d(x, y, z);
+				}
+				glEnd();
 			}
-			glEnd();
+		}
+		if (whichColor == 11) { // Non-linear scheme
+			for (int i = 0; i < poly->ntris; i++) {
+				Triangle *temp_t = poly->tlist[i];
+				glBegin(GL_POLYGON);
+				for (int j = 0; j < 3; j++) {
+					Vertex *temp_v = temp_t->verts[j];
+					glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
+					float rgb[3];
+					float x = temp_v->x;
+					float y = temp_v->y;
+					float z = temp_v->z;
+					float s = temp_v->s;
+					NonLinear(s, rgb);
+					glColor3f(rgb[0], rgb[1], rgb[2]);
+					glVertex3d(x, y, z);
+				}
+				glEnd();
+			}
 		}
 	}
 
@@ -873,30 +1002,47 @@ void TW_CALL loadNewObjCB(void *clientData)
 	case 4:
 		strcpy(object_name, "distance_field2");
 		break;
+	
+	case 5:
+		strcpy(object_name, "temperature1.dat");
+		break;
+
+	case 6:
+		strcpy(object_name, "temperature2.dat");
+		break;
 	}
 
-	poly->finalize();
+	if(isPoly)
+		poly->finalize();
 
 	//Reset();
 
 	char tmp_str[512];
+	if (strstr(object_name, "dat")) {
+		// load dat file and put in same data structure
+		sprintf(tmp_str, "./models/%s", object_name);
+		isPoly = false;
+		/*load_dat(tmp_str);*/
+		Load_data_on_uniformGrids(tmp_str);
+		build_edge_list();
+		build_face_list();
+	}
+	else {
+		sprintf(tmp_str, "./models/%s.ply", object_name);
 
-	sprintf(tmp_str, "./models/%s.ply", object_name);
-
-	FILE *this_file = fopen(tmp_str, "r");
-	poly = new Polyhedron(this_file);
-	fclose(this_file);
-	
-	poly->initialize(); // initialize everything
+		FILE *this_file = fopen(tmp_str, "r");
+		poly = new Polyhedron(this_file);
+		fclose(this_file);
+		isPoly = true;
+		poly->initialize(); // initialize everything
+		poly->calc_bounding_sphere();
+		poly->calc_face_normals_and_area();
+		poly->average_normals();
+	}
 
 	// Q 3.3a	
 	calcLimits(); // calc s_max and s_min for the new objects
 	g_WhiteThreshold = 0.5; // reset g_WhiteThreshold
-	
-	poly->calc_bounding_sphere();
-	poly->calc_face_normals_and_area();
-	poly->average_normals();
-
 	glutSetWindow(MainWindow);
 	glutPostRedisplay();
 }
@@ -952,7 +1098,8 @@ void InitTwBar(TwBar *bar)
 		// ShapeEV associates Shape enum values with labels that will be displayed instead of enum values
 		//TwEnumVal shapeEV[NUM_SHAPES] = { { SHAPE_TEAPOT, "Teapot" },{ SHAPE_TORUS, "Torus" },{ SHAPE_CONE, "Cone" },{ BUNNY, "Bunny" } };
 		
-		TwEnumVal shapeEV[NUM_SHAPES] = { { 0, "torus_field" },{ 1, "iceland_current_field" },{ 2, "diesel_field1" },{ 3, "distance_field1" },{ 4, "distance_field2" } };
+		TwEnumVal shapeEV[NUM_SHAPES] = { { 0, "torus_field" },{ 1, "iceland_current_field" },{ 2, "diesel_field1" },{ 3, "distance_field1" },{ 4, "distance_field2" },
+		{ 5, "temperature1.dat" },{ 6, "temperature2.dat" } };
 
 		// Create a type for the enum shapeEV
 		TwType shapeType = TwDefineEnum("ShapeType", shapeEV, NUM_SHAPES);
