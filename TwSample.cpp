@@ -25,10 +25,6 @@
 #include <math.h>
 #include <vector>
 
-#include "IsoVertex.cpp"
-#include "IsoEdge.cpp"
-#include "IsoFace.cpp"
-
 #if defined(_WIN32) || defined(_WIN64)
 //  MiniGLUT.h is provided to avoid the need of having GLUT installed to 
 //  recompile this example. Do not use it in your own programs, better
@@ -353,7 +349,7 @@ void computeContours() {
 				continue;
 			}
 			if (ctr == 4) { // If there are 4 intersections
-				
+				// TODO
 			}
 		}
 	}
