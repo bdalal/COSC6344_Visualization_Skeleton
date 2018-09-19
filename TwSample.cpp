@@ -69,6 +69,8 @@ float s_min, s_max;
 float g_WhiteThreshold = 0.5;
 //iso scalar value
 float g_sprime = 50;
+//iso contour count
+int g_ncontours = 1;
 
 bool isPoly = true;
 
@@ -278,9 +280,8 @@ void build_face_list() {
 	}
 }
 
-void computeContours() {
+void computeContours(float g_sprime) {
 	// for each face compute the intersection
-	isocontours.clear();
 	int i, j, k;
 	for (i = 0; i < faces.size(); i++) {
 		std::vector<quad> tmpf = faces[i];
@@ -1233,6 +1234,15 @@ void TW_CALL GetAxesCB(void *value, void *clientData)
 }
 
 
+void TW_CALL nContours(void *ClientData) { // first draws one contour based on the scalar value chosen and then draws the n contours equally spaced across the scalar range
+	isocontours.clear();
+	computeContours(g_sprime); // draw the first contour based on the iso value chosen
+	for (int i = 1; i < g_ncontours; i++) { // draw the rest equally spaced out
+		float sprime_i = s_min + (i * (s_max - s_min) / (g_ncontours));
+		computeContours(sprime_i);
+	}
+}
+
 void TW_CALL loadNewObjCB(void *clientData)
 {
 	char object_name[128] = "torus_field";
@@ -1283,7 +1293,7 @@ void TW_CALL loadNewObjCB(void *clientData)
 		build_face_list();
 		// Q 3.3a	
 		calcLimits(); // calc s_max and s_min for the new objects
-		computeContours();
+		nContours(nullptr);
 		/*computeIntersections();*/
 		/*computeQuadIntersections();*/
 	}
@@ -1306,11 +1316,6 @@ void TW_CALL loadNewObjCB(void *clientData)
 	glutSetWindow(MainWindow);
 	glutPostRedisplay();
 }
-
-void TW_CALL recomputeContour(void *clientData) {
-	computeContours();
-}
-
 
 void InitTwBar(TwBar *bar)
 {
@@ -1394,15 +1399,12 @@ void InitTwBar(TwBar *bar)
 
 	//Add modifier for the iso-contour value
 	TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, " label = 'Adjust Iso scalar value' min=1 max=100, step=0.001 help='Increase/decrease iso scalar value'");
-	TwAddButton(bar, "Update Iso value", recomputeContour, NULL, " label = 'Load new iso contour after changing value' ");
+	TwAddButton(bar, "Update Iso value", nContours, NULL, " label = 'Load new iso contour after changing value' ");
 
 	//Add modifier for the no. of iso-contours computed and displayed
-	/*TwAddVarRW(bar, "No. of Iso contours", TW_TYPE_UINT16, &g_ncontours, " label = 'Adjust no. of contours shown' min=1 max=256 step=1 help='Increase/decrease the no. of contours'");
-	TwAddButton(bar, "Update no. of contours", todo, NULL, "label='Update the no. of contours'");*/
+	TwAddVarRW(bar, "No. of Iso contours", TW_TYPE_UINT16, &g_ncontours, " label = 'Adjust no. of contours shown' min=1 max=256 step=1 help='Increase/decrease the no. of contours'");
+	TwAddButton(bar, "Update no. of contours", nContours, NULL, "label='Update the no. of contours'");
 }
-
-
-
 
 // Main
 int main(int argc, char *argv[])
