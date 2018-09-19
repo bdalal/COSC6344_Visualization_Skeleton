@@ -175,12 +175,7 @@ typedef struct quad
 	lineseg e0, e1, e2, e3; // indices of 4 edges in edgeList
 };
 int NX, NY;
-//std::vector<node> grid_pts; // array of all vertices
-//std::vector<lineseg> edgeList; // array of all edges connecting vertices
-//std::vector<quad> quadList; // array of all faces formed by various edges
-std::vector<node> intersections; // array of all edges where the contour intersects
 std::vector<lineseg> isocontours; // array of all lines formed by intersecting points
-
 std::vector<std::vector<node>> grid;
 std::vector<std::vector<lineseg>> rightlines;
 std::vector<std::vector<lineseg>> toplines;
@@ -190,19 +185,6 @@ std::vector<std::vector<quad>> faces;
 
 void Load_data_on_uniformGrids(const char *name)
 {
-	//int i;
-	//FILE *fp = fopen(name, "r");
-	//if (fp == NULL) return;
-	//fscanf(fp, "%d %d\n", &NX, &NY);
-	//grid_pts.clear();
-	//for (i = 0; i < NX*NY; i++)
-	//{
-	//	float x, y, z, s;
-	//	fscanf(fp, "%f, %f, %f, %f \n", x, y, z, s);
-	//	IsoVertex vertex(x, y, z, s);
-	//	/*grid_pts.push_back(tmp);*/
-	//}
-	//fclose(fp);
 	int i, j;
 	FILE* fp = fopen(name, "r");
 	if (fp == NULL) return;
@@ -217,6 +199,7 @@ void Load_data_on_uniformGrids(const char *name)
 		}
 		grid.push_back(tmpv);
 	}
+	fclose(fp);
 }
 
 void build_edge_list() {
@@ -728,7 +711,6 @@ void BWR_Divergent(float s, float rgb[3]) {
 	HsvRgb(hsv, rgb);
 }
 
-// Q 3.1
 void HeatMap(float s, float rgb[3]) {
 	float t = (s - s_min) / (s_max - s_min);
 	if (t <= 0) {
@@ -755,7 +737,6 @@ void HeatMap(float s, float rgb[3]) {
 //TODO Interface to move data range
 
 
-// Q 3.2
 void Discrete(float s, float rgb[3]) {
 	int t = floor((s - s_min) / (s_max - s_min) * 10);
 	if (t >= 0 && t <= 5) {
@@ -771,7 +752,6 @@ void Discrete(float s, float rgb[3]) {
 	rgb[0] = rgb[1] = rgb[2] = 1.;
 }
 
-// Q 3.3b
 void NonLinear(float s, float rgb[3]) {
 	float t = (sqrt(s) - sqrt(s_min)) / (sqrt(s_max) - sqrt(s_min));
 	float hsv[4];
@@ -780,106 +760,6 @@ void NonLinear(float s, float rgb[3]) {
 	HsvRgb(hsv, rgb);
 }
 
-//void computeIntersections() {
-//	intersections.clear();
-//	for (int i = 0; i < edgeList.size(); i++) { // check if intersection exists for any edge
-//		float tintersect, xintersect, yintersect, zintersect;
-//		node vert0 = grid_pts[edgeList[i].n1]; // get the first vertex based on the edge
-//		node vert1 = grid_pts[edgeList[i].n2]; // get the second vertex based on the edge
-//		float x0 = vert0.x;
-//		float x1 = vert1.x;
-//		float y0 = vert0.y;
-//		float y1 = vert1.y;
-//		float z0 = vert0.z;
-//		float z1 = vert1.z;
-//		float s0 = vert0.s;
-//		float s1 = vert1.s;
-//		if (s0 == s1 && s0 != s_mid) { // handle special cases
-//			node intersection;
-//			intersection.s = s_min - 1;
-//			intersections.push_back(intersection);
-//			continue;
-//		}
-//		if (s0 == s1 && s0 == s_mid) { // handle special cases
-//			node intersection;
-//			intersection.x = x0;
-//			intersection.y = y0;
-//			intersection.z = z0;
-//			intersection.s = s_mid;
-//			intersections.push_back(intersection);
-//			intersection.x = x1; // potential assignment issue
-//			intersection.y = y1;
-//			intersection.z = z1;
-//			intersection.s = s_mid;
-//			intersections.push_back(intersection);
-//			continue;
-//		}
-//		if (s1 > s0)
-//			tintersect = (s_mid - s0) / (s1 - s0); // compute t*
-//		if (s0 > s1)
-//			tintersect = (s_mid - s1) / (s0 - s1);
-//		if (tintersect >= 0 && tintersect <= 1) { // intersection confirmed. compute vertices of intersection
-//			xintersect = ((1 - tintersect) * x0) + (tintersect * x1);
-//			yintersect = ((1 - tintersect) * y0) + (tintersect * y1);
-//			zintersect = ((1 - tintersect) * z0) + (tintersect * z1);
-//			node intersection; // new vertex to hold the intersection
-//			intersection.x = xintersect;
-//			intersection.y = yintersect;
-//			intersection.z = zintersect;
-//			intersection.s = s_mid;
-//			intersections.push_back(intersection); // put intersection in array at end
-//		}
-//		else {
-//			node intersection;
-//			intersection.s = s_min - 1;
-//			intersections.push_back(intersection); // no intersection with the edge. push in null value
-//		}
-//	}
-//}
-
-//void computeQuadIntersections() {
-//	isocontours.clear();
-//	for (int i = 0; i < quadList.size(); i++) { // for every face find the intersections and connect
-//		quad face = quadList[i];
-//		int ctr = 0;
-//		int edges[4]; // to store the edges that have intersections
-//		for (int j = 0; j < 4; j++)
-//			if (intersections[face.edges[j]].s > s_min) { // check if intersection exists
-//				edges[ctr++] = face.edges[j]; // store edge having intersection
-//			}
-//		if (ctr == 2) { // if there are 2 interactions on the face
-//			lineseg line; // create a new linesegment to represent the isocontour
-//			line.n1 = edges[0]; // index of the first intersecting edge
-//			line.n2 = edges[1]; // index of the second intersecting edge
-//			isocontours.push_back(line);
-//		}
-//		if (ctr == 4) {
-//			float m = (grid_pts[edges[0]].s + grid_pts[edges[1]].s + grid_pts[edges[2]].s + grid_pts[edges[3]].s) / 4;
-//			if (s_mid < m) {
-//				lineseg line1;
-//				line1.n1 = edges[0];
-//				line1.n2 = edges[3];
-//				isocontours.push_back(line1);
-//				lineseg line2;
-//				line2.n1 = edges[1];
-//				line2.n2 = edges[2];
-//				isocontours.push_back(line2);
-//			}
-//			else {
-//				lineseg line1;
-//				line1.n1 = edges[0];
-//				line1.n2 = edges[1];
-//				isocontours.push_back(line1);
-//				lineseg line2;
-//				line2.n1 = edges[2];
-//				line2.n2 = edges[3];
-//				isocontours.push_back(line2);
-//			}
-//		}
-//	}
-//}
-
-// Q 3.3a
 void calcLimits() {
 	if (isPoly) {
 		s_max = s_min = poly->tlist[0]->verts[0]->s;
@@ -987,15 +867,9 @@ void Display(void)
 				glVertex3f(v.x, v.y, v.z);
 				glEnd();
 				glColor3f(0, 0, 0);
-				/*glBegin(GL_LINE_STRIP);
-				glVertex3f(face.v0.x, face.v0.y, face.v0.z);
-				glVertex3f(face.v1.x, face.v1.y, face.v1.z);
-				glVertex3f(face.v2.x, face.v2.y, face.v2.z);
-				glVertex3f(face.v3.x, face.v3.y, face.v3.z);
-				glEnd();*/
 			}
 		}
-		// draw the contour
+		// draw the contours
 		glColor3f(0, 0, 0);
 		for (int i = 0; i < isocontours.size(); i++) {
 			node v1 = isocontours[i].n1;
@@ -1005,28 +879,6 @@ void Display(void)
 			glVertex3f(v2.x, v2.y, v2.z);
 			glEnd();
 		}
-		/*for (int i = 0; i < quadList.size(); i++) {
-			quad face = quadList[i];
-			glBegin(GL_QUADS);
-			float rgb[3];
-			for (int j = 0; j < 4; j++) {
-				node temp = grid_pts[face.verts[j]];
-				Rainbow_color(temp.s, rgb);
-				glColor3f(rgb[0], rgb[1], rgb[2]);
-				glVertex3f(temp.x, temp.y, temp.z);
-			}
-			glEnd();
-		}*/
-		// draw and color the contours
-		/*glColor3f(0, 0, 0);
-		for (int i = 0; i < isocontours.size(); i++) {
-			glBegin(GL_LINE);
-			node first = intersections[isocontours[i].n1];
-			node second = intersections[isocontours[i].n2];
-			glVertex3f(first.x, first.y, first.z);
-			glVertex3f(second.x, second.y, second.z);
-			glEnd();
-		}*/
 	}
 	else {
 		if (whichColor < 7) { // Standard AntTweakBar colors
@@ -1287,15 +1139,11 @@ void TW_CALL loadNewObjCB(void *clientData)
 		// load dat file and put in same data structure
 		sprintf(tmp_str, "./models/%s", object_name);
 		isPoly = false;
-		/*load_dat(tmp_str);*/
 		Load_data_on_uniformGrids(tmp_str);
 		build_edge_list();
 		build_face_list();
-		// Q 3.3a	
 		calcLimits(); // calc s_max and s_min for the new objects
 		nContours(nullptr);
-		/*computeIntersections();*/
-		/*computeQuadIntersections();*/
 	}
 	else {
 		sprintf(tmp_str, "./models/%s.ply", object_name);
@@ -1305,7 +1153,6 @@ void TW_CALL loadNewObjCB(void *clientData)
 		fclose(this_file);
 		isPoly = true;
 		poly->initialize(); // initialize everything
-		// Q 3.3a	
 		calcLimits(); // calc s_max and s_min for the new objects
 		poly->calc_bounding_sphere();
 		poly->calc_face_normals_and_area();
