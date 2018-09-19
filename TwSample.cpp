@@ -25,6 +25,9 @@
 #include <math.h>
 #include <vector>
 
+#include "IsoVertex.cpp"
+#include "IsoEdge.cpp"
+#include "IsoFace.cpp"
 
 #if defined(_WIN32) || defined(_WIN64)
 //  MiniGLUT.h is provided to avoid the need of having GLUT installed to 
@@ -65,9 +68,11 @@ float g_MatDiffuse[] = { 1.0f, 1.0f, 0.0f, 1.0f };
 // Light parameter
 float g_LightMultiplier = 1.0f;
 float g_LightDirection[] = { -0.57735f, -0.57735f, -0.57735f };
-float s_min, s_max, s_mid;
+float s_min, s_max;
 // White threshold
 float g_WhiteThreshold = 0.5;
+//iso scalar value
+float g_sprime = 50;
 
 bool isPoly = true;
 
@@ -159,99 +164,197 @@ Polyhedron *poly = NULL;
 // To read from dat files
 typedef struct node
 {
-	float x, y, z, s;
+	float x, y, z, s; // represents a vertex with the scalar
 };
 typedef struct lineseg
 {
-	int n1, n2;
+	node n1, n2; // indices of the vertices in grid_pts
+	node intersection;
 };
 typedef struct quad
 {
-	int verts[4];
-	int edges[4];
+	node v0, v1, v2, v3; // indices of 4 vertices in grid_pts
+	lineseg e0, e1, e2, e3; // indices of 4 edges in edgeList
 };
 int NX, NY;
-std::vector<node> grid_pts;
-std::vector<lineseg> edgeList;
-std::vector<quad> quadList;
+//std::vector<node> grid_pts; // array of all vertices
+//std::vector<lineseg> edgeList; // array of all edges connecting vertices
+//std::vector<quad> quadList; // array of all faces formed by various edges
+std::vector<node> intersections; // array of all edges where the contour intersects
+std::vector<lineseg> isocontours; // array of all lines formed by intersecting points
+
+std::vector<std::vector<node>> grid;
+std::vector<std::vector<lineseg>> rightlines;
+std::vector<std::vector<lineseg>> toplines;
+std::vector<std::vector<quad>> faces;
+
+//edges above to be compared against intersections to get actual points to draw lines
 
 void Load_data_on_uniformGrids(const char *name)
 {
-	int i;
-	FILE *fp = fopen(name, "r");
+	//int i;
+	//FILE *fp = fopen(name, "r");
+	//if (fp == NULL) return;
+	//fscanf(fp, "%d %d\n", &NX, &NY);
+	//grid_pts.clear();
+	//for (i = 0; i < NX*NY; i++)
+	//{
+	//	float x, y, z, s;
+	//	fscanf(fp, "%f, %f, %f, %f \n", x, y, z, s);
+	//	IsoVertex vertex(x, y, z, s);
+	//	/*grid_pts.push_back(tmp);*/
+	//}
+	//fclose(fp);
+	int i, j;
+	FILE* fp = fopen(name, "r");
 	if (fp == NULL) return;
 	fscanf(fp, "%d %d\n", &NX, &NY);
-	grid_pts.clear();
-	for (i = 0; i < NX*NY; i++)
-	{
-		node tmp;
-		fscanf(fp, "%f, %f, %f, %f \n", &tmp.x, &tmp.y, &tmp.z, &tmp.s);
-		grid_pts.push_back(tmp);
+	grid.clear();
+	for (i = 0; i < NY; i++) {
+		std::vector<node> tmpv;
+		for (j = 0; j < NX; j++) {
+			node tmp;
+			fscanf(fp, "%f, %f, %f, %f \n", &tmp.x, &tmp.y, &tmp.z, &tmp.s);
+			tmpv.push_back(tmp);
+		}
+		grid.push_back(tmpv);
 	}
-	fclose(fp);
 }
 
 void build_edge_list() {
 	int i, j;
-	int cur = 0;
-	edgeList.clear();
-	for (j = 0; j < NY - 1; j++) {
-		cur = j * NX;
-		for (i = cur; i < cur + NX - 1; i++) {
-			// TODO: build horizontal edge between vertex i and i + 1
-			lineseg edge1;
-			edge1.n1 = i;
-			edge1.n2 = i + 1;
-			// TODO: build vertical edge between vertex i and i + NX
-			lineseg edge2;
-			edge2.n1 = i;
-			edge2.n2 = i + NX;
-
-			edgeList.push_back(edge1);
-			edgeList.push_back(edge2);
+	rightlines.clear();
+	for (i = 0; i < NY; i++) {
+		std::vector<lineseg> tmpl;
+		for (j = 0; j < NX - 1; j++) {
+			node n1 = grid[i][j];
+			node n2 = grid[i][j + 1];
+			lineseg rightedge;
+			rightedge.n1 = n1;
+			rightedge.n2 = n2;
+			rightedge.intersection;
+			tmpl.push_back(rightedge);
 		}
-		//TODO: build right most edge between vertex cur and cur + NX - vertical edge
-		lineseg rightedge;
-		rightedge.n1 = cur + NX - 1;
-		rightedge.n2 = cur + NX + NX - 1;
-		edgeList.push_back(rightedge);
+		rightlines.push_back(tmpl);
 	}
-	// build edges on the top boundary
-	cur = (NY - 1) * NX;
-	for (i = 0; i < NX - 1; i++) {
-		//TODO build horizontal edge between vertex i and i+1
-		lineseg topedge;
-		topedge.n1 = i + cur;
-		topedge.n2 = i + cur + 1;
-		edgeList.push_back(topedge);
+	toplines.clear();
+	for (i = 0; i < NY - 1; i++) {
+		std::vector<lineseg> tmpl;
+		for (j = 0; j < NX; j++) {
+			node n1 = grid[i][j];
+			node n2 = grid[i + 1][j];
+			lineseg topedge;
+			topedge.n1 = n1;
+			topedge.n2 = n2;
+			topedge.intersection;
+			tmpl.push_back(topedge);
+		}
+		toplines.push_back(tmpl);
 	}
 }
 
 void build_face_list() {
 	int i, j;
-	int cur = 0;
-	quadList.clear();
-	for (j = 0; j < NY - 1; j++) {
-		cur = j * NX;
-		for (i = cur; i < cur + NX - 1; i++) {
+	faces.clear();
+	for (i = 0; i < NY - 1; i++) {
+		std::vector<quad> tmpf;
+		for (j = 0; j < NX - 1; j++) {
 			quad face;
-			// TODO: find the 4 vertices (indices) to form the quad
-			face.verts[0] = i;
-			face.verts[1] = i + 1;
-			face.verts[2] = i + 1 + NX;
-			face.verts[3] = i + NX;
-			// TODO: find the 4 edges (indices) to form the quad. There could be multiple scenarios!
-			face.edges[0] = (2 * i) - j;
-			face.edges[3] = (2 * i) - j + 1;
-			if (i == cur + NX - 2) // we're at the rightmost face
-				face.edges[1] = (2 * i) - j + 2;
-			else
-				face.edges[1] = (2 * i) - j + 3;
-			if (i >= (NY - 2) * NX) // we're at the topmost face
-				face.edges[2] = i + NX + cur + 1;
-			else
-				face.edges[2] = (2 * i) - j + 3 + NX;
-			quadList.push_back(face);
+			node v0 = grid[i][j];
+			node v1 = grid[i][j + 1];
+			node v2 = grid[i + 1][j + 1];
+			node v3 = grid[i + 1][j];
+			lineseg ebr = rightlines[i][j]; // bottom right edge
+			lineseg etr = rightlines[i + 1][j]; // top right edge
+			lineseg elt = toplines[i][j]; // left top edge
+			lineseg ert = toplines[i][j + 1]; // right top edge
+			face.v0 = v0;
+			face.v1 = v1;
+			face.v2 = v2;
+			face.v3 = v3;
+			face.e0 = ebr;
+			face.e1 = ert;
+			face.e2 = etr;
+			face.e3 = elt;
+			tmpf.push_back(face);
+		}
+		faces.push_back(tmpf);
+	}
+}
+
+void computeContours() {
+	// for each face compute the intersection
+	isocontours.clear();
+	int i, j, k;
+	for (i = 0; i < faces.size(); i++) {
+		std::vector<quad> tmpf = faces[i];
+		for (j = 0; j < tmpf.size(); j++) { // get edges for every face in a row
+			quad face = tmpf[j];
+			lineseg* e[4] = { &face.e0, &face.e1, &face.e2, &face.e3 };
+			bool intersects[4] = { false, false, false, false };
+			int ctr = 0;
+			for (k = 0; k < 4; k++) {
+				// compute intersection for every edge and store on edge itself
+				node n1 = e[k]->n1;
+				node n2 = e[k]->n2;
+				if (n1.s == n2.s && n1.s != g_sprime)
+					continue;
+				if (n1.s == n2.s && n1.s == g_sprime) {
+					lineseg contour;
+					contour.n1 = n1;
+					contour.n2 = n2;
+					isocontours.push_back(contour);
+					ctr++; // there's an intersection
+					continue;
+				}
+				float tprime, xprime, yprime, zprime;
+				tprime = (g_sprime - n1.s) / (n2.s - n1.s);
+				if (tprime >= 0 && tprime <= 1) {
+					ctr++; // there's an intersection so increment the counter
+					xprime = ((1 - tprime) * n1.x) + (tprime * n2.x);
+					yprime = ((1 - tprime) * n1.y) + (tprime * n2.y);
+					zprime = ((1 - tprime) * n1.z) + (tprime * n2.z);
+					e[k]->intersection.x = xprime;
+					e[k]->intersection.y = yprime;
+					e[k]->intersection.z = zprime;
+					e[k]->intersection.s = g_sprime;
+					intersects[k] = true;
+				}
+			}
+			if (ctr == 0)
+				continue;
+			if (ctr == 1 || ctr == 3) {
+				char* c = "Something is very wrong";
+			}
+			// connect the intersections based on the count
+			if (ctr == 2) { // if there are 2 intersections
+				lineseg contour;
+				if (intersects[0]) {
+					contour.n1 = e[0]->intersection;
+					if (intersects[1])
+						contour.n2 = e[1]->intersection;
+					else if (intersects[2])
+						contour.n2 = e[2]->intersection;
+					else
+						contour.n2 = e[3]->intersection;
+				}
+				else if (intersects[1]) {
+					contour.n1 = e[1]->intersection;
+					if (intersects[2])
+						contour.n2 = e[2]->intersection;
+					else
+						contour.n2 = e[3]->intersection;
+				}
+				else {
+					contour.n1 = e[2]->intersection;
+					contour.n2 = e[3]->intersection;
+				}
+				isocontours.push_back(contour);
+				continue;
+			}
+			if (ctr == 4) { // If there are 4 intersections
+				
+			}
 		}
 	}
 }
@@ -578,37 +681,6 @@ void Rainbow_color(float s, float rgb[3])
 	HsvRgb(hsv, rgb);
 }
 
-//Q 3.1
-//void BWR_Divergent(float s, float rgb[3]) {
-//	// float s_mid = (s_max + s_min) / 2;
-//	float t;
-//	bool blue;
-//	if (s >= s_min && s <= s_mid) {
-//		t = (s - s_min) / (s_mid - s_min);
-//		blue = true;
-//	}
-//	else if (s > s_mid && s <= s_max) {
-//		t = (s - s_mid) / (s_max - s_mid);
-//		blue = false;
-//	}
-//	else {
-//		t = -1.;
-//	}
-//	if (t < 0 || t > 1) {
-//		rgb[0] = rgb[1] = rgb[2] = 0.;
-//		return;
-//	}
-//	float hsv[4];
-//	hsv[2] = hsv[3] = 1.; // set value and alpha channel to 1
-//	hsv[1] = t; // saturation will determine the intensity of the color
-//	hsv[0] = 0.; // set hue to red by default
-//	if (blue) {
-//		hsv[1] = 1 - t; // blue goes from darkest to lightest
-//		hsv[0] = 240; // set hue to 240
-//	}
-//	HsvRgb(hsv, rgb);
-//}
-
 void BWR_Divergent(float s, float rgb[3]) {
 	float t = (s - s_min) / (s_max - s_min);
 	float hsv[4];
@@ -676,6 +748,105 @@ void NonLinear(float s, float rgb[3]) {
 	HsvRgb(hsv, rgb);
 }
 
+//void computeIntersections() {
+//	intersections.clear();
+//	for (int i = 0; i < edgeList.size(); i++) { // check if intersection exists for any edge
+//		float tintersect, xintersect, yintersect, zintersect;
+//		node vert0 = grid_pts[edgeList[i].n1]; // get the first vertex based on the edge
+//		node vert1 = grid_pts[edgeList[i].n2]; // get the second vertex based on the edge
+//		float x0 = vert0.x;
+//		float x1 = vert1.x;
+//		float y0 = vert0.y;
+//		float y1 = vert1.y;
+//		float z0 = vert0.z;
+//		float z1 = vert1.z;
+//		float s0 = vert0.s;
+//		float s1 = vert1.s;
+//		if (s0 == s1 && s0 != s_mid) { // handle special cases
+//			node intersection;
+//			intersection.s = s_min - 1;
+//			intersections.push_back(intersection);
+//			continue;
+//		}
+//		if (s0 == s1 && s0 == s_mid) { // handle special cases
+//			node intersection;
+//			intersection.x = x0;
+//			intersection.y = y0;
+//			intersection.z = z0;
+//			intersection.s = s_mid;
+//			intersections.push_back(intersection);
+//			intersection.x = x1; // potential assignment issue
+//			intersection.y = y1;
+//			intersection.z = z1;
+//			intersection.s = s_mid;
+//			intersections.push_back(intersection);
+//			continue;
+//		}
+//		if (s1 > s0)
+//			tintersect = (s_mid - s0) / (s1 - s0); // compute t*
+//		if (s0 > s1)
+//			tintersect = (s_mid - s1) / (s0 - s1);
+//		if (tintersect >= 0 && tintersect <= 1) { // intersection confirmed. compute vertices of intersection
+//			xintersect = ((1 - tintersect) * x0) + (tintersect * x1);
+//			yintersect = ((1 - tintersect) * y0) + (tintersect * y1);
+//			zintersect = ((1 - tintersect) * z0) + (tintersect * z1);
+//			node intersection; // new vertex to hold the intersection
+//			intersection.x = xintersect;
+//			intersection.y = yintersect;
+//			intersection.z = zintersect;
+//			intersection.s = s_mid;
+//			intersections.push_back(intersection); // put intersection in array at end
+//		}
+//		else {
+//			node intersection;
+//			intersection.s = s_min - 1;
+//			intersections.push_back(intersection); // no intersection with the edge. push in null value
+//		}
+//	}
+//}
+
+//void computeQuadIntersections() {
+//	isocontours.clear();
+//	for (int i = 0; i < quadList.size(); i++) { // for every face find the intersections and connect
+//		quad face = quadList[i];
+//		int ctr = 0;
+//		int edges[4]; // to store the edges that have intersections
+//		for (int j = 0; j < 4; j++)
+//			if (intersections[face.edges[j]].s > s_min) { // check if intersection exists
+//				edges[ctr++] = face.edges[j]; // store edge having intersection
+//			}
+//		if (ctr == 2) { // if there are 2 interactions on the face
+//			lineseg line; // create a new linesegment to represent the isocontour
+//			line.n1 = edges[0]; // index of the first intersecting edge
+//			line.n2 = edges[1]; // index of the second intersecting edge
+//			isocontours.push_back(line);
+//		}
+//		if (ctr == 4) {
+//			float m = (grid_pts[edges[0]].s + grid_pts[edges[1]].s + grid_pts[edges[2]].s + grid_pts[edges[3]].s) / 4;
+//			if (s_mid < m) {
+//				lineseg line1;
+//				line1.n1 = edges[0];
+//				line1.n2 = edges[3];
+//				isocontours.push_back(line1);
+//				lineseg line2;
+//				line2.n1 = edges[1];
+//				line2.n2 = edges[2];
+//				isocontours.push_back(line2);
+//			}
+//			else {
+//				lineseg line1;
+//				line1.n1 = edges[0];
+//				line1.n2 = edges[1];
+//				isocontours.push_back(line1);
+//				lineseg line2;
+//				line2.n1 = edges[2];
+//				line2.n2 = edges[3];
+//				isocontours.push_back(line2);
+//			}
+//		}
+//	}
+//}
+
 // Q 3.3a
 void calcLimits() {
 	if (isPoly) {
@@ -693,13 +864,14 @@ void calcLimits() {
 		}
 	}
 	else {
-		s_max = s_min = grid_pts[0].s;
-		for (int i = 1; i < NX * NY; i++) {
-			float s_temp = grid_pts[i].s;
-			if (s_temp < s_min)
-				s_min = s_temp;
-			if (s_temp > s_max)
-				s_max = s_temp;
+		s_max = s_min = grid[0][0].s;
+		for (int i = 0; i < NY; i++) {
+			for (int j = 0; j < NX; j++) {
+				if (grid[i][j].s < s_min)
+					s_min = grid[i][j].s;
+				if (grid[i][j].s > s_max)
+					s_max = grid[i][j].s;
+			}
 		}
 	}
 }
@@ -758,8 +930,50 @@ void Display(void)
 	//glCallList(g_CurrentShape);
 
 	// Draw the 3D object
-	if (!isPoly) {
-		for (int i = 0; i < quadList.size(); i++) {
+	if (!isPoly) { // draw and color the object
+		for (int i = 0; i < NY - 1; i++) {
+			for (int j = 0; j < NX - 1; j++) {
+				quad face = faces[i][j];
+				float rgb[3];
+				node v;
+				glBegin(GL_QUADS);
+				v = face.v0;
+				Rainbow_color(v.s, rgb);
+				glColor3f(rgb[0], rgb[1], rgb[2]);
+				glVertex3f(v.x, v.y, v.z);
+				v = face.v1;
+				Rainbow_color(v.s, rgb);
+				glColor3f(rgb[0], rgb[1], rgb[2]);
+				glVertex3f(v.x, v.y, v.z);
+				v = face.v2;
+				Rainbow_color(v.s, rgb);
+				glColor3f(rgb[0], rgb[1], rgb[2]);
+				glVertex3f(v.x, v.y, v.z);
+				v = face.v3;
+				Rainbow_color(v.s, rgb);
+				glColor3f(rgb[0], rgb[1], rgb[2]);
+				glVertex3f(v.x, v.y, v.z);
+				glEnd();
+				glColor3f(0, 0, 0);
+				/*glBegin(GL_LINE_STRIP);
+				glVertex3f(face.v0.x, face.v0.y, face.v0.z);
+				glVertex3f(face.v1.x, face.v1.y, face.v1.z);
+				glVertex3f(face.v2.x, face.v2.y, face.v2.z);
+				glVertex3f(face.v3.x, face.v3.y, face.v3.z);
+				glEnd();*/
+			}
+		}
+		// draw the contour
+		glColor3f(0, 0, 0);
+		for (int i = 0; i < isocontours.size(); i++) {
+			node v1 = isocontours[i].n1;
+			node v2 = isocontours[i].n2;
+			glBegin(GL_LINES);
+			glVertex3f(v1.x, v1.y, v1.z);
+			glVertex3f(v2.x, v2.y, v2.z);
+			glEnd();
+		}
+		/*for (int i = 0; i < quadList.size(); i++) {
 			quad face = quadList[i];
 			glBegin(GL_QUADS);
 			float rgb[3];
@@ -770,7 +984,17 @@ void Display(void)
 				glVertex3f(temp.x, temp.y, temp.z);
 			}
 			glEnd();
-		}
+		}*/
+		// draw and color the contours
+		/*glColor3f(0, 0, 0);
+		for (int i = 0; i < isocontours.size(); i++) {
+			glBegin(GL_LINE);
+			node first = intersections[isocontours[i].n1];
+			node second = intersections[isocontours[i].n2];
+			glVertex3f(first.x, first.y, first.z);
+			glVertex3f(second.x, second.y, second.z);
+			glEnd();
+		}*/
 	}
 	else {
 		if (whichColor < 7) { // Standard AntTweakBar colors
@@ -1026,6 +1250,11 @@ void TW_CALL loadNewObjCB(void *clientData)
 		Load_data_on_uniformGrids(tmp_str);
 		build_edge_list();
 		build_face_list();
+		// Q 3.3a	
+		calcLimits(); // calc s_max and s_min for the new objects
+		computeContours();
+		/*computeIntersections();*/
+		/*computeQuadIntersections();*/
 	}
 	else {
 		sprintf(tmp_str, "./models/%s.ply", object_name);
@@ -1035,16 +1264,20 @@ void TW_CALL loadNewObjCB(void *clientData)
 		fclose(this_file);
 		isPoly = true;
 		poly->initialize(); // initialize everything
+		// Q 3.3a	
+		calcLimits(); // calc s_max and s_min for the new objects
 		poly->calc_bounding_sphere();
 		poly->calc_face_normals_and_area();
 		poly->average_normals();
 	}
 
-	// Q 3.3a	
-	calcLimits(); // calc s_max and s_min for the new objects
 	g_WhiteThreshold = 0.5; // reset g_WhiteThreshold
 	glutSetWindow(MainWindow);
 	glutPostRedisplay();
+}
+
+void TW_CALL recomputeContour(void *clientData) {
+	computeContours();
 }
 
 
@@ -1124,10 +1357,17 @@ void InitTwBar(TwBar *bar)
 		TwAddVarRW(bar, "Object colors", ColorType, &whichColor, " help='Change object color.' ");
 	}
 
-	// calculate white threshold for the default object - torus
-
+	// Add modifier for the white threshold
 	TwAddVarRW(bar, "WhiteThreshold", TW_TYPE_FLOAT, &g_WhiteThreshold, 
 		" label = 'Adjust white threshold' min=0 max=1 step=0.01 keyIncr = 'w' keyDecr = 's' help='Increase/decrease white threshold' ");
+
+	//Add modifier for the iso-contour value
+	TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, " label = 'Adjust Iso scalar value' min=1 max=100, step=0.001 help='Increase/decrease iso scalar value'");
+	TwAddButton(bar, "Update Iso value", recomputeContour, NULL, " label = 'Load new iso contour after changing value' ");
+
+	//Add modifier for the no. of iso-contours computed and displayed
+	/*TwAddVarRW(bar, "No. of Iso contours", TW_TYPE_UINT16, &g_ncontours, " label = 'Adjust no. of contours shown' min=1 max=256 step=1 help='Increase/decrease the no. of contours'");
+	TwAddButton(bar, "Update no. of contours", todo, NULL, "label='Update the no. of contours'");*/
 }
 
 
