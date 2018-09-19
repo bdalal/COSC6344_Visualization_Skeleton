@@ -14,7 +14,7 @@
 //  @date       2018/08/09
 //
 //  Modified by Binoy Dalal
-//  @date       2018/09/07
+//  @date       2018/09/18
 //  ---------------------------------------------------------------------------
 
 
@@ -348,8 +348,43 @@ void computeContours() {
 				isocontours.push_back(contour);
 				continue;
 			}
-			if (ctr == 4) { // If there are 4 intersections
-				// TODO
+			if (ctr == 4) { // If there are 4 intersections. Condition hit for dataset2 at g_sprime = 49.000
+				float s0 = face.v0.s;
+				float s1 = face.v1.s;
+				float s2 = face.v2.s;
+				float s3 = face.v3.s;
+				float m = (s0 + s1 + s2 + s3) / 4;
+				lineseg contour1, contour2;
+				if (g_sprime <= m) {
+					if (s0 <= m) {
+						contour1.n1 = e[0]->intersection;
+						contour1.n2 = e[3]->intersection;
+						contour2.n1 = e[1]->intersection;
+						contour2.n2 = e[2]->intersection;
+					}
+					else {
+						contour1.n1 = e[0]->intersection;
+						contour1.n2 = e[1]->intersection;
+						contour2.n1 = e[3]->intersection;
+						contour2.n2 = e[2]->intersection;
+					}
+				}
+				else {
+					if (s0 <= m) {
+						contour1.n1 = e[0]->intersection;
+						contour1.n2 = e[1]->intersection;
+						contour2.n1 = e[3]->intersection;
+						contour2.n2 = e[2]->intersection;
+					}
+					else {
+						contour1.n1 = e[0]->intersection;
+						contour1.n2 = e[3]->intersection;
+						contour2.n1 = e[1]->intersection;
+						contour2.n2 = e[2]->intersection;
+					}
+				}
+				isocontours.push_back(contour1);
+				isocontours.push_back(contour2);
 			}
 		}
 	}
