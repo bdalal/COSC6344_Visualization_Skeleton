@@ -72,6 +72,8 @@ float g_sprime = 50;
 //iso contour count
 int g_ncontours = 1;
 
+TwBar *bar = NULL; // Pointer to the tweak bar
+
 bool isPoly = true;
 
 
@@ -1272,8 +1274,6 @@ void TW_CALL loadNewObjCB(void *clientData)
 		Load_data_on_uniformGrids(tmp_str);
 		build_edge_list();
 		build_face_list();
-		calcLimits(); // calc s_max and s_min for the new objects
-		nContours(nullptr);
 	}
 	else {
 		sprintf(tmp_str, "./models/%s.ply", object_name);
@@ -1282,19 +1282,32 @@ void TW_CALL loadNewObjCB(void *clientData)
 		fclose(this_file);
 		isPoly = true;
 		poly->initialize(); // initialize everything
-		calcLimits(); // calc s_max and s_min for the new objects
 		poly->calc_bounding_sphere();
 		poly->calc_face_normals_and_area();
 		poly->average_normals();
-		nContours(nullptr);
 	}
+
+	calcLimits(); // calc s_max and s_min for the new objects
+	TwRemoveVar(bar, "Iso value");
+	TwRemoveVar(bar, "Update Iso value / no. of contours");
+	float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value
+	std::string definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
+		" help='Increase/decrease iso scalar value'";
+	const char* def = definition.c_str();
+	g_sprime = (s_max + s_min) / 2;
+	g_ncontours = 1;
+	TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, def);
+	TwAddButton(bar, "Update Iso value / no. of contours", nContours, NULL, " label = 'Load new iso contour after changing value or update no. of contours' ");
+
+	// draw contours
+	nContours(nullptr);
 
 	g_WhiteThreshold = 0.5; // reset g_WhiteThreshold
 	glutSetWindow(MainWindow);
 	glutPostRedisplay();
 }
 
-void InitTwBar(TwBar *bar)
+void InitTwBar()
 {
 	// Create a tweak bar
 	bar = TwNewBar("TweakBar");
@@ -1374,20 +1387,21 @@ void InitTwBar(TwBar *bar)
 	TwAddVarRW(bar, "WhiteThreshold", TW_TYPE_FLOAT, &g_WhiteThreshold, 
 		" label = 'Adjust white threshold' min=0 max=1 step=0.01 keyIncr = 'w' keyDecr = 's' help='Increase/decrease white threshold' ");
 
-	//Add modifier for the iso-contour value
-	TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, " label = 'Adjust Iso scalar value' min=1 max=100, step=0.001 help='Increase/decrease iso scalar value'");
-	TwAddButton(bar, "Update Iso value", nContours, NULL, " label = 'Load new iso contour after changing value' ");
-
 	//Add modifier for the no. of iso-contours computed and displayed
 	TwAddVarRW(bar, "No. of Iso contours", TW_TYPE_UINT16, &g_ncontours, " label = 'Adjust no. of contours shown' min=1 max=256 step=1 help='Increase/decrease the no. of contours'");
-	TwAddButton(bar, "Update no. of contours", nContours, NULL, "label='Update the no. of contours'");
+
+	//Add modifier for the iso-contour value
+	float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value
+	std::string definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
+		" help='Increase/decrease iso scalar value'";
+	const char* def = definition.c_str();
+	TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, def);
+	TwAddButton(bar, "Update Iso value / no. of contours", nContours, NULL, " label = 'Load new iso contour after changing value or update no. of contours' ");
 }
 
 // Main
 int main(int argc, char *argv[])
 {
-	TwBar *bar = NULL; // Pointer to the tweak bar
-
 	float axis[] = { 0.7f, 0.7f, 0.0f }; // initial model rotation
 	float angle = 0.8f;
 
@@ -1443,7 +1457,7 @@ int main(int argc, char *argv[])
 
 	// Initialize the AntTweakBar interface
 
-	InitTwBar(bar);
+	InitTwBar();
 
 	// Store time
 	g_RotateTime = GetTimeMs();
