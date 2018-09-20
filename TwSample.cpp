@@ -268,6 +268,8 @@ void build_face_list() {
 }
 
 void computeContours(float g_sprime) {
+	if (g_sprime < s_min || g_sprime > s_max)
+		return;
 	// for each face compute the intersection
 	int i, j, k;
 	for (i = 0; i < faces.size(); i++) {
@@ -379,6 +381,8 @@ void computeContours(float g_sprime) {
 }
 
 void computeContoursTriangles(float g_sprime) {
+	if (g_sprime < s_min || g_sprime > s_max)
+		return;
 	for (int i = 0; i < poly->ntris; i++) {
 		Triangle* tmpt = poly->tlist[i];
 		Edge **e = tmpt->edges;
@@ -1100,7 +1104,10 @@ void TW_CALL nContours(void *ClientData) { // first draws one contour based on t
 		isocontours.clear();
 		computeContours(g_sprime); // draw the first contour based on the iso value chosen
 		for (int i = 1; i < g_ncontours; i++) { // draw the rest equally spaced out
-			float sprime_i = s_min + (i * (s_max - s_min) / (g_ncontours));
+			float buffer = (s_max - s_min) / 1000;
+			float sprime_i = s_min + (i * (s_max - s_min) / (g_ncontours - 1));
+			if (sprime_i == s_min) sprime_i += buffer; // buffer to protect against extreme values where only 1 point may be present
+			else if (sprime_i == s_max) sprime_i -= buffer;
 			computeContours(sprime_i);
 		}
 	}
@@ -1108,7 +1115,10 @@ void TW_CALL nContours(void *ClientData) { // first draws one contour based on t
 		isocontours_t.clear();
 		computeContoursTriangles(g_sprime);
 		for (int i = 1; i < g_ncontours; i++) {
-			float sprime_i = s_min + (i * (s_max - s_min) / (g_ncontours));
+			float buffer = (s_max - s_min) / 1000;
+			float sprime_i = s_min + (i * (s_max - s_min) / (g_ncontours - 1));
+			if (sprime_i == s_min) sprime_i += buffer; // buffer to protect against extreme values where only 1 point may be present
+			else if (sprime_i == s_max) sprime_i -= buffer;
 			computeContoursTriangles(sprime_i);
 		}
 	}
