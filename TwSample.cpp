@@ -181,6 +181,8 @@ std::vector<std::vector<lineseg>> rightlines;
 std::vector<std::vector<lineseg>> toplines;
 std::vector<std::vector<quad>> faces;
 
+std::vector<lineseg> isocontours_t;
+
 //edges above to be compared against intersections to get actual points to draw lines
 
 void Load_data_on_uniformGrids(const char *name)
@@ -370,6 +372,71 @@ void computeContours(float g_sprime) {
 				isocontours.push_back(contour1);
 				isocontours.push_back(contour2);
 			}
+		}
+	}
+}
+
+void computeContoursTriangles(float g_sprime) {
+	for (int i = 0; i < poly->ntris; i++) {
+		Triangle* tmpt = poly->tlist[i];
+		Edge **e = tmpt->edges;
+		int ctr = 0;
+		std::vector<node> intersections;
+		for (int j = 0; j < 3; j++) {
+			Vertex** v = e[j]->verts;
+			Vertex* v0 = v[0];
+			Vertex* v1 = v[1];
+			if (v0->s == v1->s && v0->s != g_sprime)
+				continue;
+			if (v1->s == v1->s && v0->s == g_sprime) {
+				lineseg contour;
+				node n1, n2;
+				n1.x = v0->x;
+				n2.x = v1->x;
+				n1.y = v0->y;
+				n2.y = v1->y;
+				n1.z = v0->z;
+				n2.z = v1->z;
+				n1.s = v0->s;
+				n2.s = v1->s;
+				contour.n1 = n1;
+				contour.n2 = n2;
+				ctr++;
+				isocontours_t.push_back(contour);
+				break;
+			}
+			float tprime, xprime, yprime, zprime;
+			node intersection;
+			tprime = (g_sprime - v0->s) / (v1->s - v0->s);
+			if (tprime >= 0 && tprime <= 1) {
+				xprime = ((1 - tprime) * v0->x) + (tprime * v1->x);
+				yprime = ((1 - tprime) * v0->y) + (tprime * v1->y);
+				zprime = ((1 - tprime) * v0->z) + (tprime * v1->z);
+				intersection.x = xprime;
+				intersection.y = yprime;
+				intersection.z = zprime;
+				intersection.s = g_sprime;
+				intersections.push_back(intersection);
+				ctr++;
+			}
+		}
+		if (ctr == 1 || ctr == 3) {
+			char* c = "Something is very wrong";
+		}
+		if (ctr == 2) {
+			lineseg contour;
+			node n1, n2;
+			n1.x = intersections[0].x;
+			n1.y = intersections[0].y;
+			n1.z = intersections[0].z;
+			n1.s = intersections[0].s;
+			n2.x = intersections[1].x;
+			n2.y = intersections[1].y;
+			n2.z = intersections[1].z;
+			n2.s = intersections[1].s;
+			contour.n1 = n1;
+			contour.n2 = n2;
+			isocontours_t.push_back(contour);
 		}
 	}
 }
@@ -788,6 +855,37 @@ void calcLimits() {
 	}
 }
 
+void drawTriangularObject(void(*colorFunction)(float s, float rgb[3])) {
+	// draw and color object
+	for (int i = 0; i < poly->ntris; i++) {
+		Triangle *temp_t = poly->tlist[i];
+		glBegin(GL_POLYGON);
+		for (int j = 0; j < 3; j++) {
+			Vertex *temp_v = temp_t->verts[j];
+			glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
+			float rgb[3];
+			float x = temp_v->x;
+			float y = temp_v->y;
+			float z = temp_v->z;
+			float s = temp_v->s;
+			colorFunction(s, rgb);
+			glColor3f(rgb[0], rgb[1], rgb[2]);
+			glVertex3d(x, y, z);
+		}
+		glEnd();
+	}
+	// draw contours
+	glColor3f(0, 0, 0);
+	for (int i = 0; i < isocontours_t.size(); i++) {
+		node v1 = isocontours_t[i].n1;
+		node v2 = isocontours_t[i].n2;
+		glBegin(GL_LINES);
+		glVertex3f(v1.x, v1.y, v1.z);
+		glVertex3f(v2.x, v2.y, v2.z);
+		glEnd();
+	}
+}
+
 // Callback function called by GLUT to render screen
 void Display(void)
 {
@@ -897,101 +995,123 @@ void Display(void)
 				glEnd();
 			}
 		}
-		if (whichColor == 7) { // Rainbow scheme
-			for (int i = 0; i < poly->ntris; i++) {
-				Triangle *temp_t = poly->tlist[i];
-				glBegin(GL_POLYGON);
-				for (int j = 0; j < 3; j++) {
-					Vertex *temp_v = temp_t->verts[j];
-					glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-					float rgb[3];
-					float x = temp_v->x;
-					float y = temp_v->y;
-					float z = temp_v->z;
-					float s = temp_v->s;
-					Rainbow_color(s, rgb);
-					glColor3f(rgb[0], rgb[1], rgb[2]);
-					glVertex3d(x, y, z);
-				}
-				glEnd();
+		else {
+			void(*colorFunction)(float, float[]);
+			switch (whichColor)
+			{
+			case 7:				
+				colorFunction = &Rainbow_color;
+				break;
+			case 8:
+				colorFunction = &BWR_Divergent;
+				break;
+			case 9:
+				colorFunction = &HeatMap;
+				break;
+			case 10:
+				colorFunction = &Discrete;
+				break;
+			case 11:
+				colorFunction = &NonLinear;
+				break;
 			}
+			drawTriangularObject(colorFunction);
 		}
-		if (whichColor == 8) { //  BWR Divergent scheme
-			for (int i = 0; i < poly->ntris; i++) {
-				Triangle *temp_t = poly->tlist[i];
-				glBegin(GL_POLYGON);
-				for (int j = 0; j < 3; j++) {
-					Vertex *temp_v = temp_t->verts[j];
-					glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-					float rgb[3];
-					float x = temp_v->x;
-					float y = temp_v->y;
-					float z = temp_v->z;
-					float s = temp_v->s;
-					BWR_Divergent(s, rgb);
-					glColor3f(rgb[0], rgb[1], rgb[2]);
-					glVertex3d(x, y, z);
-				}
-				glEnd();
-			}
-		}
-		if (whichColor == 9) { // HeatMap scheme
-			for (int i = 0; i < poly->ntris; i++) {
-				Triangle *temp_t = poly->tlist[i];
-				glBegin(GL_POLYGON);
-				for (int j = 0; j < 3; j++) {
-					Vertex *temp_v = temp_t->verts[j];
-					glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-					float rgb[3];
-					float x = temp_v->x;
-					float y = temp_v->y;
-					float z = temp_v->z;
-					float s = temp_v->s;
-					HeatMap(s, rgb);
-					glColor3f(rgb[0], rgb[1], rgb[2]);
-					glVertex3d(x, y, z);
-				}
-				glEnd();
-			}
-		}
-		if (whichColor == 10) { // Discrete scheme
-			for (int i = 0; i < poly->ntris; i++) {
-				Triangle *temp_t = poly->tlist[i];
-				glBegin(GL_POLYGON);
-				for (int j = 0; j < 3; j++) {
-					Vertex *temp_v = temp_t->verts[j];
-					glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-					float rgb[3];
-					float x = temp_v->x;
-					float y = temp_v->y;
-					float z = temp_v->z;
-					float s = temp_v->s;
-					Discrete(s, rgb);
-					glColor3f(rgb[0], rgb[1], rgb[2]);
-					glVertex3d(x, y, z);
-				}
-				glEnd();
-			}
-		}
-		if (whichColor == 11) { // Non-linear scheme
-			for (int i = 0; i < poly->ntris; i++) {
-				Triangle *temp_t = poly->tlist[i];
-				glBegin(GL_POLYGON);
-				for (int j = 0; j < 3; j++) {
-					Vertex *temp_v = temp_t->verts[j];
-					glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-					float rgb[3];
-					float x = temp_v->x;
-					float y = temp_v->y;
-					float z = temp_v->z;
-					float s = temp_v->s;
-					NonLinear(s, rgb);
-					glColor3f(rgb[0], rgb[1], rgb[2]);
-					glVertex3d(x, y, z);
-				}
-				glEnd();
-			}
-		}
+		//if (whichColor == 7) { // Rainbow scheme
+		//	for (int i = 0; i < poly->ntris; i++) {
+		//		Triangle *temp_t = poly->tlist[i];
+		//		glBegin(GL_POLYGON);
+		//		for (int j = 0; j < 3; j++) {
+		//			Vertex *temp_v = temp_t->verts[j];
+		//			glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
+		//			float rgb[3];
+		//			float x = temp_v->x;
+		//			float y = temp_v->y;
+		//			float z = temp_v->z;
+		//			float s = temp_v->s;
+		//			Rainbow_color(s, rgb);
+		//			glColor3f(rgb[0], rgb[1], rgb[2]);
+		//			glVertex3d(x, y, z);
+		//		}
+		//		glEnd();
+		//	}
+		//}
+		//if (whichColor == 8) { //  BWR Divergent scheme
+		//	for (int i = 0; i < poly->ntris; i++) {
+		//		Triangle *temp_t = poly->tlist[i];
+		//		glBegin(GL_POLYGON);
+		//		for (int j = 0; j < 3; j++) {
+		//			Vertex *temp_v = temp_t->verts[j];
+		//			glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
+		//			float rgb[3];
+		//			float x = temp_v->x;
+		//			float y = temp_v->y;
+		//			float z = temp_v->z;
+		//			float s = temp_v->s;
+		//			BWR_Divergent(s, rgb);
+		//			glColor3f(rgb[0], rgb[1], rgb[2]);
+		//			glVertex3d(x, y, z);
+		//		}
+		//		glEnd();
+		//	}
+		//}
+		//if (whichColor == 9) { // HeatMap scheme
+		//	for (int i = 0; i < poly->ntris; i++) {
+		//		Triangle *temp_t = poly->tlist[i];
+		//		glBegin(GL_POLYGON);
+		//		for (int j = 0; j < 3; j++) {
+		//			Vertex *temp_v = temp_t->verts[j];
+		//			glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
+		//			float rgb[3];
+		//			float x = temp_v->x;
+		//			float y = temp_v->y;
+		//			float z = temp_v->z;
+		//			float s = temp_v->s;
+		//			HeatMap(s, rgb);
+		//			glColor3f(rgb[0], rgb[1], rgb[2]);
+		//			glVertex3d(x, y, z);
+		//		}
+		//		glEnd();
+		//	}
+		//}
+		//if (whichColor == 10) { // Discrete scheme
+		//	for (int i = 0; i < poly->ntris; i++) {
+		//		Triangle *temp_t = poly->tlist[i];
+		//		glBegin(GL_POLYGON);
+		//		for (int j = 0; j < 3; j++) {
+		//			Vertex *temp_v = temp_t->verts[j];
+		//			glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
+		//			float rgb[3];
+		//			float x = temp_v->x;
+		//			float y = temp_v->y;
+		//			float z = temp_v->z;
+		//			float s = temp_v->s;
+		//			Discrete(s, rgb);
+		//			glColor3f(rgb[0], rgb[1], rgb[2]);
+		//			glVertex3d(x, y, z);
+		//		}
+		//		glEnd();
+		//	}
+		//}
+		//if (whichColor == 11) { // Non-linear scheme
+		//	for (int i = 0; i < poly->ntris; i++) {
+		//		Triangle *temp_t = poly->tlist[i];
+		//		glBegin(GL_POLYGON);
+		//		for (int j = 0; j < 3; j++) {
+		//			Vertex *temp_v = temp_t->verts[j];
+		//			glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
+		//			float rgb[3];
+		//			float x = temp_v->x;
+		//			float y = temp_v->y;
+		//			float z = temp_v->z;
+		//			float s = temp_v->s;
+		//			NonLinear(s, rgb);
+		//			glColor3f(rgb[0], rgb[1], rgb[2]);
+		//			glVertex3d(x, y, z);
+		//		}
+		//		glEnd();
+		//	}
+		//}
 	}
 
 	// Draw axes
@@ -1087,11 +1207,21 @@ void TW_CALL GetAxesCB(void *value, void *clientData)
 
 
 void TW_CALL nContours(void *ClientData) { // first draws one contour based on the scalar value chosen and then draws the n contours equally spaced across the scalar range
-	isocontours.clear();
-	computeContours(g_sprime); // draw the first contour based on the iso value chosen
-	for (int i = 1; i < g_ncontours; i++) { // draw the rest equally spaced out
-		float sprime_i = s_min + (i * (s_max - s_min) / (g_ncontours));
-		computeContours(sprime_i);
+	if (!isPoly) {
+		isocontours.clear();
+		computeContours(g_sprime); // draw the first contour based on the iso value chosen
+		for (int i = 1; i < g_ncontours; i++) { // draw the rest equally spaced out
+			float sprime_i = s_min + (i * (s_max - s_min) / (g_ncontours));
+			computeContours(sprime_i);
+		}
+	}
+	else {
+		isocontours_t.clear();
+		computeContoursTriangles(g_sprime);
+		for (int i = 1; i < g_ncontours; i++) {
+			float sprime_i = s_min + (i * (s_max - s_min) / (g_ncontours));
+			computeContoursTriangles(sprime_i);
+		}
 	}
 }
 
@@ -1147,7 +1277,6 @@ void TW_CALL loadNewObjCB(void *clientData)
 	}
 	else {
 		sprintf(tmp_str, "./models/%s.ply", object_name);
-
 		FILE *this_file = fopen(tmp_str, "r");
 		poly = new Polyhedron(this_file);
 		fclose(this_file);
@@ -1157,6 +1286,7 @@ void TW_CALL loadNewObjCB(void *clientData)
 		poly->calc_bounding_sphere();
 		poly->calc_face_normals_and_area();
 		poly->average_normals();
+		nContours(nullptr);
 	}
 
 	g_WhiteThreshold = 0.5; // reset g_WhiteThreshold
@@ -1305,6 +1435,7 @@ int main(int argc, char *argv[])
 	poly->calc_bounding_sphere();
 	poly->calc_face_normals_and_area();
 	poly->average_normals();
+	nContours(nullptr);
 
 	// Build a display list for the axes
 
