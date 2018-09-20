@@ -857,6 +857,44 @@ void calcLimits() {
 	}
 }
 
+void drawSquareObject(void(*colorFunction)(float s, float rgb[3])) {
+	for (int i = 0; i < NY - 1; i++) {
+		for (int j = 0; j < NX - 1; j++) {
+			quad face = faces[i][j];
+			float rgb[3];
+			node v;
+			glBegin(GL_QUADS);
+			v = face.v0;
+			colorFunction(v.s, rgb);
+			glColor3f(rgb[0], rgb[1], rgb[2]);
+			glVertex3f(v.x, v.y, v.z);
+			v = face.v1;
+			colorFunction(v.s, rgb);
+			glColor3f(rgb[0], rgb[1], rgb[2]);
+			glVertex3f(v.x, v.y, v.z);
+			v = face.v2;
+			colorFunction(v.s, rgb);
+			glColor3f(rgb[0], rgb[1], rgb[2]);
+			glVertex3f(v.x, v.y, v.z);
+			v = face.v3;
+			colorFunction(v.s, rgb);
+			glColor3f(rgb[0], rgb[1], rgb[2]);
+			glVertex3f(v.x, v.y, v.z);
+			glEnd();
+		}
+	}
+	// draw the contours
+	glColor3f(0, 0, 0);
+	for (int i = 0; i < isocontours.size(); i++) {
+		node v1 = isocontours[i].n1;
+		node v2 = isocontours[i].n2;
+		glBegin(GL_LINES);
+		glVertex3f(v1.x, v1.y, v1.z);
+		glVertex3f(v2.x, v2.y, v2.z);
+		glEnd();
+	}
+}
+
 void drawTriangularObject(void(*colorFunction)(float s, float rgb[3])) {
 	// draw and color object
 	for (int i = 0; i < poly->ntris; i++) {
@@ -938,70 +976,32 @@ void Display(void)
 	glMultMatrixf(mat);
 	glScalef(g_Zoom, g_Zoom, g_Zoom);
 
-	// The draw function
 	//glCallList(g_CurrentShape);
 
+	//decide colorscheme based on choice
+	void(*colorFunction)(float, float[]);
+	switch (whichColor)
+	{
+	case 0:
+		colorFunction = &Rainbow_color;
+		break;
+	case 1:
+		colorFunction = &BWR_Divergent;
+		break;
+	case 2:
+		colorFunction = &HeatMap;
+		break;
+	case 3:
+		colorFunction = &Discrete;
+		break;
+	case 4:
+		colorFunction = &NonLinear;
+		break;
+	}
+
 	// Draw the 3D object
-	if (!isPoly) { // draw and color the object
-		for (int i = 0; i < NY - 1; i++) {
-			for (int j = 0; j < NX - 1; j++) {
-				quad face = faces[i][j];
-				float rgb[3];
-				node v;
-				glBegin(GL_QUADS);
-				v = face.v0;
-				Rainbow_color(v.s, rgb);
-				glColor3f(rgb[0], rgb[1], rgb[2]);
-				glVertex3f(v.x, v.y, v.z);
-				v = face.v1;
-				Rainbow_color(v.s, rgb);
-				glColor3f(rgb[0], rgb[1], rgb[2]);
-				glVertex3f(v.x, v.y, v.z);
-				v = face.v2;
-				Rainbow_color(v.s, rgb);
-				glColor3f(rgb[0], rgb[1], rgb[2]);
-				glVertex3f(v.x, v.y, v.z);
-				v = face.v3;
-				Rainbow_color(v.s, rgb);
-				glColor3f(rgb[0], rgb[1], rgb[2]);
-				glVertex3f(v.x, v.y, v.z);
-				glEnd();
-				glColor3f(0, 0, 0);
-			}
-		}
-		// draw the contours
-		glColor3f(0, 0, 0);
-		for (int i = 0; i < isocontours.size(); i++) {
-			node v1 = isocontours[i].n1;
-			node v2 = isocontours[i].n2;
-			glBegin(GL_LINES);
-			glVertex3f(v1.x, v1.y, v1.z);
-			glVertex3f(v2.x, v2.y, v2.z);
-			glEnd();
-		}
-	}
-	else {
-		void(*colorFunction)(float, float[]);
-		switch (whichColor)
-		{
-		case 0:				
-			colorFunction = &Rainbow_color;
-			break;
-		case 1:
-			colorFunction = &BWR_Divergent;
-			break;
-		case 2:
-			colorFunction = &HeatMap;
-			break;
-		case 3:
-			colorFunction = &Discrete;
-			break;
-		case 4:
-			colorFunction = &NonLinear;
-			break;
-		}
-		drawTriangularObject(colorFunction);
-	}
+	if (!isPoly) drawSquareObject(colorFunction);
+	else drawTriangularObject(colorFunction);
 
 	// Draw axes
 	if (g_Axes)
