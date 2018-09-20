@@ -90,7 +90,7 @@ const GLfloat Colors[7][3] =
 	{ 1., 0., 1. },		// magenta
 	{ 1., 1., 1. },		// white
 };
-#define NUM_COLORS 12
+#define NUM_COLORS 5
 int whichColor = 0;
 
 // the stroke characters 'X' 'Y' 'Z' :
@@ -981,139 +981,26 @@ void Display(void)
 		}
 	}
 	else {
-		if (whichColor < 7) { // Standard AntTweakBar colors
-			glColor3fv(Colors[whichColor]); // color the object
-			for (int i = 0; i < poly->ntris; i++) {
-				Triangle *temp_t = poly->tlist[i];
-				glBegin(GL_POLYGON);
-				for (int j = 0; j < 3; j++) {
-					Vertex *temp_v = temp_t->verts[j];
-					glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-					float x = temp_v->x;
-					float y = temp_v->y;
-					float z = temp_v->z;
-					glVertex3d(x, y, z);
-				}
-				glEnd();
-			}
+		void(*colorFunction)(float, float[]);
+		switch (whichColor)
+		{
+		case 0:				
+			colorFunction = &Rainbow_color;
+			break;
+		case 1:
+			colorFunction = &BWR_Divergent;
+			break;
+		case 2:
+			colorFunction = &HeatMap;
+			break;
+		case 3:
+			colorFunction = &Discrete;
+			break;
+		case 4:
+			colorFunction = &NonLinear;
+			break;
 		}
-		else {
-			void(*colorFunction)(float, float[]);
-			switch (whichColor)
-			{
-			case 7:				
-				colorFunction = &Rainbow_color;
-				break;
-			case 8:
-				colorFunction = &BWR_Divergent;
-				break;
-			case 9:
-				colorFunction = &HeatMap;
-				break;
-			case 10:
-				colorFunction = &Discrete;
-				break;
-			case 11:
-				colorFunction = &NonLinear;
-				break;
-			}
-			drawTriangularObject(colorFunction);
-		}
-		//if (whichColor == 7) { // Rainbow scheme
-		//	for (int i = 0; i < poly->ntris; i++) {
-		//		Triangle *temp_t = poly->tlist[i];
-		//		glBegin(GL_POLYGON);
-		//		for (int j = 0; j < 3; j++) {
-		//			Vertex *temp_v = temp_t->verts[j];
-		//			glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-		//			float rgb[3];
-		//			float x = temp_v->x;
-		//			float y = temp_v->y;
-		//			float z = temp_v->z;
-		//			float s = temp_v->s;
-		//			Rainbow_color(s, rgb);
-		//			glColor3f(rgb[0], rgb[1], rgb[2]);
-		//			glVertex3d(x, y, z);
-		//		}
-		//		glEnd();
-		//	}
-		//}
-		//if (whichColor == 8) { //  BWR Divergent scheme
-		//	for (int i = 0; i < poly->ntris; i++) {
-		//		Triangle *temp_t = poly->tlist[i];
-		//		glBegin(GL_POLYGON);
-		//		for (int j = 0; j < 3; j++) {
-		//			Vertex *temp_v = temp_t->verts[j];
-		//			glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-		//			float rgb[3];
-		//			float x = temp_v->x;
-		//			float y = temp_v->y;
-		//			float z = temp_v->z;
-		//			float s = temp_v->s;
-		//			BWR_Divergent(s, rgb);
-		//			glColor3f(rgb[0], rgb[1], rgb[2]);
-		//			glVertex3d(x, y, z);
-		//		}
-		//		glEnd();
-		//	}
-		//}
-		//if (whichColor == 9) { // HeatMap scheme
-		//	for (int i = 0; i < poly->ntris; i++) {
-		//		Triangle *temp_t = poly->tlist[i];
-		//		glBegin(GL_POLYGON);
-		//		for (int j = 0; j < 3; j++) {
-		//			Vertex *temp_v = temp_t->verts[j];
-		//			glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-		//			float rgb[3];
-		//			float x = temp_v->x;
-		//			float y = temp_v->y;
-		//			float z = temp_v->z;
-		//			float s = temp_v->s;
-		//			HeatMap(s, rgb);
-		//			glColor3f(rgb[0], rgb[1], rgb[2]);
-		//			glVertex3d(x, y, z);
-		//		}
-		//		glEnd();
-		//	}
-		//}
-		//if (whichColor == 10) { // Discrete scheme
-		//	for (int i = 0; i < poly->ntris; i++) {
-		//		Triangle *temp_t = poly->tlist[i];
-		//		glBegin(GL_POLYGON);
-		//		for (int j = 0; j < 3; j++) {
-		//			Vertex *temp_v = temp_t->verts[j];
-		//			glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-		//			float rgb[3];
-		//			float x = temp_v->x;
-		//			float y = temp_v->y;
-		//			float z = temp_v->z;
-		//			float s = temp_v->s;
-		//			Discrete(s, rgb);
-		//			glColor3f(rgb[0], rgb[1], rgb[2]);
-		//			glVertex3d(x, y, z);
-		//		}
-		//		glEnd();
-		//	}
-		//}
-		//if (whichColor == 11) { // Non-linear scheme
-		//	for (int i = 0; i < poly->ntris; i++) {
-		//		Triangle *temp_t = poly->tlist[i];
-		//		glBegin(GL_POLYGON);
-		//		for (int j = 0; j < 3; j++) {
-		//			Vertex *temp_v = temp_t->verts[j];
-		//			glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-		//			float rgb[3];
-		//			float x = temp_v->x;
-		//			float y = temp_v->y;
-		//			float z = temp_v->z;
-		//			float s = temp_v->s;
-		//			NonLinear(s, rgb);
-		//			glColor3f(rgb[0], rgb[1], rgb[2]);
-		//			glVertex3d(x, y, z);
-		//		}
-		//		glEnd();
-		//	}
-		//}
+		drawTriangularObject(colorFunction);
 	}
 
 	// Draw axes
@@ -1374,8 +1261,7 @@ void InitTwBar()
 
 	// Add the enum variable 'whichColor' to 'bar' 
 	{
-		TwEnumVal ColorEV[NUM_COLORS] = { {0, "red"}, {1, "yellow"}, {2, "green"}, {3, "cyan"}, {4, "blue"}, {5, "magenta"},  {6, "white"}, {7, "Rainbow"}, {8, "Blue-White-Red"}, 
-		{9, "Heat map"}, {10, "Discrete"}, {11, "NonLinear - Extremes"} };
+		TwEnumVal ColorEV[NUM_COLORS] = { {0, "Rainbow"}, {1, "Blue-White-Red"}, {2, "Heat map"}, {3, "Discrete"}, {4, "NonLinear - Extremes"} };
 		// Create a type for the enum ColorEV
 		TwType ColorType = TwDefineEnum("ColoType", ColorEV, NUM_COLORS);
 
