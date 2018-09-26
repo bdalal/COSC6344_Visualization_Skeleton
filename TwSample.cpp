@@ -167,7 +167,9 @@ int g_XYplane = 1; // Toggle XY cutting plane
 int g_YZplane = 1; // Toggle YZ cutting plane
 int g_XZplane = 1; // Toggle XZ cutting plane
 
-float g_gradient = 0.; // Value of change in the 3dVis
+float g_gradientMin = 0.; // Value of change in the 3dVis
+float g_gradientMax = 0.; // Value of change in the 3dVis
+float g_gradientAbsMax = 0; // Set maximum value for gradient for use in interface
 
 #include "Skeleton.h"
 Polyhedron *poly = NULL;
@@ -265,10 +267,11 @@ void computeGradient() {
 					grid3d[i][j][k].dTdz = (grid3d[i][j][k].T - grid3d[i][j][k - 1].T) / (grid3d[i][j][k].z - grid3d[i][j][k - 1].z);
 				else
 					grid3d[i][j][k].dTdz = (grid3d[i][j][k + 1].T - grid3d[i][j][k - 1].T) / (grid3d[i][j][k + 1].z - grid3d[i][j][k - 1].z);
+
+				grid3d[i][j][k].grad = sqrt(pow(grid3d[i][j][k].dTdx, 2) + pow(grid3d[i][j][k].dTdy, 2) + pow(grid3d[i][j][k].dTdz, 2));
 			}
 		}
 	}
-
 }
 
 void populate3dStruct() {
@@ -296,7 +299,7 @@ void color3dStruct() {
 			for (int k = 0; k < NZ3d; k++) {
 				isoSurfaceNode* node;
 				node = &grid3d[i][j][k];
-				if (node->T >= s_min && node->T <= s_max)
+				if ((node->T >= s_min && node->T <= s_max) && (node->grad >= g_gradientMin && node->grad <= g_gradientMax))
 					colorFunction(node->T, node->rgb);
 				else
 					node->rgb[0] = node->rgb[1] = node->rgb[2] = 0.;
@@ -999,6 +1002,7 @@ void calcLimits() {
 	}
 	else {
 		s_max = s_min = grid3d[0][0][0].T;
+		g_gradientMax = g_gradientMin = grid3d[0][0][0].grad;
 		for (int i = 0; i < NX3d; i++) {
 			for (int j = 0; j < NY3d; j++) {
 				for (int k = 0; k < NZ3d; k++) {
@@ -1006,9 +1010,14 @@ void calcLimits() {
 						s_min = grid3d[i][j][k].T;
 					if (grid3d[i][j][k].T > s_max)
 						s_max = grid3d[i][j][k].T;
+					if (grid3d[i][j][k].grad < g_gradientMin)
+						g_gradientMin = grid3d[i][j][k].grad;
+					if (grid3d[i][j][k].grad > g_gradientMax)
+						g_gradientMax = grid3d[i][j][k].grad;
 				}
 			}
 		}
+		g_gradientAbsMax = g_gradientMax;
 	}
 }
 
@@ -1361,6 +1370,11 @@ void TW_CALL nContours(void *ClientData) { // first draws one contour based on t
 	}
 }
 
+void updateGradient(void* clientData) {
+	setupTwBar();
+	color3dStruct();
+}
+
 void setupTwBar() {
 	if (isPoly == 2) {
 		TwRemoveVar(bar, "Iso value");
@@ -1374,7 +1388,9 @@ void setupTwBar() {
 		TwRemoveVar(bar, "controlX");
 		TwRemoveVar(bar, "controlY");
 		TwRemoveVar(bar, "controlZ");
-		TwRemoveVar(bar, "controlGradient");
+		TwRemoveVar(bar, "controlGradientMin");
+		TwRemoveVar(bar, "controlGradientMax");
+		TwRemoveVar(bar, "updateGradient");
 		// Control the range of values
 		std::string definition = "label='Increase minimum threshold' min=" + std::to_string(0.0) + " max= " + std::to_string(s_max) + " step=" + std::to_string((s_max - s_min) / 1000.);
 		const char* def = definition.c_str();
@@ -1386,10 +1402,18 @@ void setupTwBar() {
 		TwAddVarCB(bar, "toggleXY", TW_TYPE_BOOL32, setXYCB, getXYCB, NULL, "label='Toggle XY cutting plane'");
 		TwAddVarCB(bar, "toggleYZ", TW_TYPE_BOOL32, setYZCB, getYZCB, NULL, "label='Toggle YZ cutting plane'");
 		TwAddVarCB(bar, "toggleXZ", TW_TYPE_BOOL32, setXZCB, getXZCB, NULL, "label='Toggle XZ cutting plane'");
-		TwAddVarRW(bar, "controlX", TW_TYPE_INT32, &g_Xslice, "label='Control slice along X axis' min=0 max=50 step=1");
-		TwAddVarRW(bar, "controlY", TW_TYPE_INT32, &g_Yslice, "label='Control slice along Y axis' min=0 max=50 step=1");
-		TwAddVarRW(bar, "controlZ", TW_TYPE_INT32, &g_Zslice, "label='Control slice along Z axis' min=0 max=50 step=1");
-		TwAddVarRW(bar, "controlGradient", TW_TYPE_FLOAT, &g_gradient, ""); // TODO: populate the label
+		TwAddVarRW(bar, "controlX", TW_TYPE_INT32, &g_Xslice, "label='Control slice along X axis' min=0 max=49 step=1");
+		TwAddVarRW(bar, "controlY", TW_TYPE_INT32, &g_Yslice, "label='Control slice along Y axis' min=0 max=49 step=1");
+		TwAddVarRW(bar, "controlZ", TW_TYPE_INT32, &g_Zslice, "label='Control slice along Z axis' min=0 max=49 step=1");
+		definition = "label='Increase Min Gradient' min=" + std::to_string(0.0) + " max=" + std::to_string(g_gradientMax) + " step=" + 
+			std::to_string((g_gradientMax - g_gradientMin) / 100.);
+		def = definition.c_str();
+		TwAddVarRW(bar, "controlGradientMin", TW_TYPE_FLOAT, &g_gradientMin, def);
+		definition = "label='Decrease Max Gradient' min=" + std::to_string(g_gradientMin) + " max=" + std::to_string(g_gradientAbsMax) + " step=" +
+			std::to_string((g_gradientMax - g_gradientMin) / 100.);
+		def = definition.c_str();
+		TwAddVarRW(bar, "controlGradientMax", TW_TYPE_FLOAT, &g_gradientMax, def);
+		TwAddButton(bar, "updateGradient", updateGradient, NULL, "label='Update Gradient limits'");
 	}
 	else {
 		TwRemoveVar(bar, "toggleXY");
@@ -1398,6 +1422,9 @@ void setupTwBar() {
 		TwRemoveVar(bar, "controlX");
 		TwRemoveVar(bar, "controlY");
 		TwRemoveVar(bar, "controlZ");
+		TwRemoveVar(bar, "controlGradientMin");
+		TwRemoveVar(bar, "controlGradientMax");
+		TwRemoveVar(bar, "updateGradient");
 		float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value
 		std::string definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
 			" help='Increase/decrease iso scalar value'";
@@ -1494,11 +1521,10 @@ void TW_CALL loadNewObjCB(void *clientData)
 	}
 	else if (strstr(object_name, "3dVis")) {
 		isPoly = 2;
-		// setColorFunction();
 		populate3dStruct();
+		computeGradient();
 		calcLimits();
 		color3dStruct();
-		computeGradient();
 		setupTwBar();
 	}
 	else {
