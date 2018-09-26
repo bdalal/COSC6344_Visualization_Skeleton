@@ -46,7 +46,7 @@ int MainWindow;
 // This example displays one of the following shapes
 //typedef enum { SHAPE_TEAPOT=1, SHAPE_TORUS, SHAPE_CONE, BUNNY } Shape;
 
-#define NUM_SHAPES 7
+#define NUM_SHAPES 8
 //Shape g_CurrentShape = SHAPE_TORUS;
 int g_CurrentShape = 0;
 
@@ -64,7 +64,7 @@ float g_MatDiffuse[] = { 1.0f, 1.0f, 0.0f, 1.0f };
 // Light parameter
 float g_LightMultiplier = 1.0f;
 float g_LightDirection[] = { -0.57735f, -0.57735f, -0.57735f };
-float s_min, s_max;
+double s_min, s_max;
 // White threshold
 float g_WhiteThreshold = 0.5;
 //iso scalar value
@@ -72,10 +72,15 @@ float g_sprime = 50;
 //iso contour count
 int g_ncontours = 1;
 
+int g_Xslice = 25; // default YZ plane at origin
+int g_Yslice = 25; // default XZ plane at origin
+int g_Zslice = 25; // default XY plane at origin
+
 TwBar *bar = NULL; // Pointer to the tweak bar
 
-bool isPoly = true;
+unsigned short isPoly = 0; // check if we're drawing quads or triangles or 3d
 
+void(*colorFunction)(float, float[]); // pointer to color function of choice
 
 // some sample color definitions:
 // this order must list order of the colors
@@ -158,6 +163,12 @@ GLuint	AxesList = 101;		// list to hold the axes
 int g_Axes = 1;   // Toggle Axes
 int g_Box = 0;    // Toggle Box
 
+int g_XYplane = 1; // Toggle XY cutting plane
+int g_YZplane = 1; // Toggle YZ cutting plane
+int g_XZplane = 1; // Toggle XZ cutting plane
+
+float g_gradient = 0.; // Value of change in the 3dVis
+
 #include "Skeleton.h"
 Polyhedron *poly = NULL;
 
@@ -176,16 +187,123 @@ typedef struct quad
 	node v0, v1, v2, v3; // indices of 4 vertices in grid_pts
 	lineseg e0, e1, e2, e3; // indices of 4 edges in edgeList
 };
+typedef struct isoSurfaceNode {
+	double x, y, z; // vertex
+	double T; // Temperature
+	float rgb[3]; // assigned color
+	float rad; // radius
+	float dTdx, dTdy, dTdz;
+	float grad; // total gradient
+};
+typedef struct sources {
+	double xc, yc, zc;
+	double a; // temperature value of the source
+};
+sources Sources[] = {
+	{1.f, 0.f, 0.f, 90.f},
+	{-1.f, -3.f, 0.f, 120.f},
+	{0.1f, 1.f, 0.f, 120.f},
+	{0.f, 0.4f, 1.f, 170.f}
+};
+
 int NX, NY;
-std::vector<lineseg> isocontours; // array of all lines formed by intersecting points
+std::vector<lineseg> isocontours; // stores all contours for quads
 std::vector<std::vector<node>> grid;
 std::vector<std::vector<lineseg>> rightlines;
 std::vector<std::vector<lineseg>> toplines;
 std::vector<std::vector<quad>> faces;
+std::vector<lineseg> isocontours_t; // stores all contours for triangles
 
-std::vector<lineseg> isocontours_t;
+const int NX3d = 50, NY3d = 50, NZ3d = 50;
+const double TEMPMAX = 100., TEMPMIN = 0.;
+isoSurfaceNode grid3d[NX3d][NY3d][NZ3d];
 
-//edges above to be compared against intersections to get actual points to draw lines
+void updateDataRange(void* clientData);
+void setupTwBar();
+void TW_CALL setXYCB(const void* value, void* clientData);
+void TW_CALL getXYCB(void* value, void* clientData);
+void TW_CALL setYZCB(const void* value, void* clientData);
+void TW_CALL getYZCB(void* value, void* clientData);
+void TW_CALL setXZCB(const void* value, void* clientData);
+void TW_CALL getXZCB(void* value, void* clientData);
+
+double getTemperature(double x, double y, double z) {
+	double t = 0.;
+	for (int i = 0; i < 4; i++)
+	{
+		double dx = x - Sources[i].xc;
+		double dy = y - Sources[i].yc;
+		double dz = z - Sources[i].zc;
+		double rsqd = dx * dx + dy * dy + dz * dz;
+		t += Sources[i].a * exp(-5.*rsqd);
+	}
+
+	if (t > TEMPMAX)
+		t = TEMPMAX;
+	return t;
+}
+
+void computeGradient() {
+	for (int i = 0; i < NX3d; i++) {
+		for (int j = 0; j < NY3d; j++) {
+			for (int k = 0; k < NZ3d; k++) {
+				if (i == 0)
+					grid3d[i][j][k].dTdx = (grid3d[i + 1][j][k].T - grid3d[i][j][k].T) / (grid3d[i + 1][j][k].x - grid3d[i][j][k].x);
+				else if (i == NX3d - 1)
+					grid3d[i][j][k].dTdx = (grid3d[i][j][k].T - grid3d[i - 1][j][k].T) / (grid3d[i][j][k].x - grid3d[i - 1][j][k].x);
+				else
+					grid3d[i][j][k].dTdx = (grid3d[i + 1][j][k].T - grid3d[i - 1][j][k].T) / (grid3d[i + 1][j][k].x - grid3d[i - 1][j][k].x);
+				if (j == 0)
+					grid3d[i][j][k].dTdy = (grid3d[i][j + 1][k].T - grid3d[i][j][k].T) / (grid3d[i][j + 1][k].y - grid3d[i][j][k].y);
+				else if (j == NY3d - 1)
+					grid3d[i][j][k].dTdy = (grid3d[i][j][k].T - grid3d[i][j - 1][k].T) / (grid3d[i][j][k].y - grid3d[i][j - 1][k].y);
+				else
+					grid3d[i][j][k].dTdy = (grid3d[i][j + 1][k].T - grid3d[i][j - 1][k].T) / (grid3d[i][j + 1][k].y - grid3d[i][j - 1][k].y);
+				if (k == 0)
+					grid3d[i][j][k].dTdz = (grid3d[i][j][k + 1].T - grid3d[i][j][k].T) / (grid3d[i][j][k + 1].z - grid3d[i][j][k].z);
+				else if (k == NZ3d - 1)
+					grid3d[i][j][k].dTdz = (grid3d[i][j][k].T - grid3d[i][j][k - 1].T) / (grid3d[i][j][k].z - grid3d[i][j][k - 1].z);
+				else
+					grid3d[i][j][k].dTdz = (grid3d[i][j][k + 1].T - grid3d[i][j][k - 1].T) / (grid3d[i][j][k + 1].z - grid3d[i][j][k - 1].z);
+			}
+		}
+	}
+
+}
+
+void populate3dStruct() {
+	double ix = 2. / NX3d;
+	double iy = 2. / NY3d;
+	double iz = 2. / NZ3d;
+	for (int i = 0; i < NX3d; i++) {
+		for (int j = 0; j < NY3d; j++) {
+			for (int k = 0; k < NZ3d; k++) {
+				isoSurfaceNode node;
+				float rgb[3];
+				node.x = (ix * i) - 1;
+				node.y = (iy * j) - 1;
+				node.z = (iz * k) - 1;
+				node.T = getTemperature(node.x, node.y, node.z);
+				grid3d[i][j][k] = node;
+			}
+		}
+	}
+}
+
+void color3dStruct() {
+	for (int i = 0; i < NX3d; i++) {
+		for (int j = 0; j < NY3d; j++) {
+			for (int k = 0; k < NZ3d; k++) {
+				isoSurfaceNode* node;
+				node = &grid3d[i][j][k];
+				if (node->T >= s_min && node->T <= s_max)
+					colorFunction(node->T, node->rgb);
+				else
+					node->rgb[0] = node->rgb[1] = node->rgb[2] = 0.;
+			}
+		}
+	}
+}
 
 void Load_data_on_uniformGrids(const char *name)
 {
@@ -833,8 +951,28 @@ void NonLinear(float s, float rgb[3]) {
 	HsvRgb(hsv, rgb);
 }
 
+void setColorFunction() {
+	switch (whichColor) {
+	case 0:
+		colorFunction = &Rainbow_color;
+		break;
+	case 1:
+		colorFunction = &BWR_Divergent;
+		break;
+	case 2:
+		colorFunction = &HeatMap;
+		break;
+	case 3:
+		colorFunction = &Discrete;
+		break;
+	case 4:
+		colorFunction = &NonLinear;
+		break;
+	}
+}
+
 void calcLimits() {
-	if (isPoly) {
+	if (isPoly == 0) {
 		s_max = s_min = poly->tlist[0]->verts[0]->s;
 		for (int i = 0; i < poly->ntris; i++) {
 			Triangle *temp_t = poly->tlist[i];
@@ -848,7 +986,7 @@ void calcLimits() {
 			}
 		}
 	}
-	else {
+	else if (isPoly == 1) {
 		s_max = s_min = grid[0][0].s;
 		for (int i = 0; i < NY; i++) {
 			for (int j = 0; j < NX; j++) {
@@ -859,9 +997,22 @@ void calcLimits() {
 			}
 		}
 	}
+	else {
+		s_max = s_min = grid3d[0][0][0].T;
+		for (int i = 0; i < NX3d; i++) {
+			for (int j = 0; j < NY3d; j++) {
+				for (int k = 0; k < NZ3d; k++) {
+					if (grid3d[i][j][k].T < s_min)
+						s_min = grid3d[i][j][k].T;
+					if (grid3d[i][j][k].T > s_max)
+						s_max = grid3d[i][j][k].T;
+				}
+			}
+		}
+	}
 }
 
-void drawSquareObject(void(*colorFunction)(float s, float rgb[3])) {
+void drawSquareObject() {
 	for (int i = 0; i < NY - 1; i++) {
 		for (int j = 0; j < NX - 1; j++) {
 			quad face = faces[i][j];
@@ -899,7 +1050,7 @@ void drawSquareObject(void(*colorFunction)(float s, float rgb[3])) {
 	}
 }
 
-void drawTriangularObject(void(*colorFunction)(float s, float rgb[3])) {
+void drawTriangularObject() {
 	// draw and color object
 	for (int i = 0; i < poly->ntris; i++) {
 		Triangle *temp_t = poly->tlist[i];
@@ -927,6 +1078,89 @@ void drawTriangularObject(void(*colorFunction)(float s, float rgb[3])) {
 		glVertex3f(v1.x, v1.y, v1.z);
 		glVertex3f(v2.x, v2.y, v2.z);
 		glEnd();
+	}
+}
+
+void draw3dObject(void(*colorFunction)(float s, float rgb[3])) {
+	for (int i = 0; i < NX3d; i++) {
+		for (int j = 0; j < NY3d; j++) {
+			for (int k = 0; k < NZ3d; k++) {
+				float rgb[3];
+				isoSurfaceNode current = grid3d[i][j][k];
+				glBegin(GL_POINTS);
+				colorFunction(current.T, rgb);
+				glColor3d(rgb[0], rgb[1], rgb[2]);
+				glVertex3d(current.x, current.y, current.z);
+				glEnd();
+			}
+		}
+	}
+}
+
+void draw3dVis() {
+	isoSurfaceNode curr;
+	if (g_XYplane) {
+		for (int i = 0; i < NX3d - 1; i++) {
+			for (int j = 0; j < NY3d - 1; j++) {
+				// construct a plane and color it
+				glBegin(GL_QUADS);
+				curr = grid3d[i][j][g_Zslice];
+				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+				glVertex3f(curr.x, curr.y, curr.z);
+				curr = grid3d[i + 1][j][g_Zslice];
+				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+				glVertex3f(curr.x, curr.y, curr.z);
+				curr = grid3d[i + 1][j + 1][g_Zslice];
+				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+				glVertex3f(curr.x, curr.y, curr.z);
+				curr = grid3d[i][j + 1][g_Zslice];
+				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+				glVertex3f(curr.x, curr.y, curr.z);
+				glEnd();
+			}
+		}
+	}
+	if (g_YZplane) {
+		for (int j = 0; j < NY3d - 1; j++) {
+			for (int k = 0; k < NZ3d - 1; k++) {
+				// construct a plane and color it
+				glBegin(GL_QUADS);
+				curr = grid3d[g_Xslice][j][k];
+				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+				glVertex3f(curr.x, curr.y, curr.z);
+				curr = grid3d[g_Xslice][j + 1][k];
+				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+				glVertex3f(curr.x, curr.y, curr.z);
+				curr = grid3d[g_Xslice][j + 1][k + 1];
+				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+				glVertex3f(curr.x, curr.y, curr.z);
+				curr = grid3d[g_Xslice][j][k + 1];
+				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+				glVertex3f(curr.x, curr.y, curr.z);
+				glEnd();
+			}
+		}
+	}
+	if (g_XZplane) {
+		for (int i = 0; i < NX3d - 1; i++) {
+			for (int k = 0; k < NZ3d - 1; k++) {
+				// construct a plane and color it
+				glBegin(GL_QUADS);
+				curr = grid3d[i][g_Yslice][k];
+				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+				glVertex3f(curr.x, curr.y, curr.z);
+				curr = grid3d[i + 1][g_Yslice][k];
+				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+				glVertex3f(curr.x, curr.y, curr.z);
+				curr = grid3d[i + 1][g_Yslice][k + 1];
+				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+				glVertex3f(curr.x, curr.y, curr.z);
+				curr = grid3d[i][g_Yslice][k + 1];
+				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+				glVertex3f(curr.x, curr.y, curr.z);
+				glEnd();
+			}
+		}
 	}
 }
 
@@ -983,7 +1217,7 @@ void Display(void)
 	//glCallList(g_CurrentShape);
 
 	//decide colorscheme based on choice
-	void(*colorFunction)(float, float[]);
+	/*void(*colorFunction)(float, float[]);
 	switch (whichColor)
 	{
 	case 0:
@@ -1001,11 +1235,14 @@ void Display(void)
 	case 4:
 		colorFunction = &NonLinear;
 		break;
-	}
+	}*/
+	setColorFunction();
 
 	// Draw the 3D object
-	if (!isPoly) drawSquareObject(colorFunction);
-	else drawTriangularObject(colorFunction);
+	if (isPoly == 1) drawSquareObject();
+	else if(isPoly == 0) drawTriangularObject();
+	// else draw3dObject(colorFunction);
+	else draw3dVis();
 
 	// Draw axes
 	if (g_Axes)
@@ -1100,7 +1337,7 @@ void TW_CALL GetAxesCB(void *value, void *clientData)
 
 
 void TW_CALL nContours(void *ClientData) { // first draws one contour based on the scalar value chosen and then draws the n contours equally spaced across the scalar range
-	if (!isPoly) {
+	if (isPoly == 1) {
 		isocontours.clear();
 		computeContours(g_sprime); // draw the first contour based on the iso value chosen
 		for (int i = 1; i < g_ncontours; i++) { // draw the rest equally spaced out
@@ -1111,7 +1348,7 @@ void TW_CALL nContours(void *ClientData) { // first draws one contour based on t
 			computeContours(sprime_i);
 		}
 	}
-	else {
+	else if(isPoly == 0) {
 		isocontours_t.clear();
 		computeContoursTriangles(g_sprime);
 		for (int i = 1; i < g_ncontours; i++) {
@@ -1122,6 +1359,87 @@ void TW_CALL nContours(void *ClientData) { // first draws one contour based on t
 			computeContoursTriangles(sprime_i);
 		}
 	}
+}
+
+void setupTwBar() {
+	if (isPoly == 2) {
+		TwRemoveVar(bar, "Iso value");
+		TwRemoveVar(bar, "Update Iso value / no. of contours");
+		TwRemoveVar(bar, "controlSmin");
+		TwRemoveVar(bar, "controlSmax");
+		TwRemoveVar(bar, "updateMinMax");
+		TwRemoveVar(bar, "toggleXY");
+		TwRemoveVar(bar, "toggleYZ");
+		TwRemoveVar(bar, "toggleXZ");
+		TwRemoveVar(bar, "controlX");
+		TwRemoveVar(bar, "controlY");
+		TwRemoveVar(bar, "controlZ");
+		TwRemoveVar(bar, "controlGradient");
+		// Control the range of values
+		std::string definition = "label='Increase minimum threshold' min=" + std::to_string(0.0) + " max= " + std::to_string(s_max) + " step=" + std::to_string((s_max - s_min) / 1000.);
+		const char* def = definition.c_str();
+		TwAddVarRW(bar, "controlSmin", TW_TYPE_DOUBLE, &s_min, def);
+		definition = "label='Decrease maximum threshold' min=" + std::to_string(s_min) + " max= " + std::to_string(100.0) + " step=" + std::to_string((s_max - s_min) / 1000.);
+		def = definition.c_str();
+		TwAddVarRW(bar, "controlSmax", TW_TYPE_DOUBLE, &s_max, def);
+		TwAddButton(bar, "updateMinMax", updateDataRange, NULL, "label='Update Temp. min/max'");
+		TwAddVarCB(bar, "toggleXY", TW_TYPE_BOOL32, setXYCB, getXYCB, NULL, "label='Toggle XY cutting plane'");
+		TwAddVarCB(bar, "toggleYZ", TW_TYPE_BOOL32, setYZCB, getYZCB, NULL, "label='Toggle YZ cutting plane'");
+		TwAddVarCB(bar, "toggleXZ", TW_TYPE_BOOL32, setXZCB, getXZCB, NULL, "label='Toggle XZ cutting plane'");
+		TwAddVarRW(bar, "controlX", TW_TYPE_INT32, &g_Xslice, "label='Control slice along X axis' min=0 max=50 step=1");
+		TwAddVarRW(bar, "controlY", TW_TYPE_INT32, &g_Yslice, "label='Control slice along Y axis' min=0 max=50 step=1");
+		TwAddVarRW(bar, "controlZ", TW_TYPE_INT32, &g_Zslice, "label='Control slice along Z axis' min=0 max=50 step=1");
+		TwAddVarRW(bar, "controlGradient", TW_TYPE_FLOAT, &g_gradient, ""); // TODO: populate the label
+	}
+	else {
+		TwRemoveVar(bar, "toggleXY");
+		TwRemoveVar(bar, "toggleYZ");
+		TwRemoveVar(bar, "toggleXZ");
+		TwRemoveVar(bar, "controlX");
+		TwRemoveVar(bar, "controlY");
+		TwRemoveVar(bar, "controlZ");
+		float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value
+		std::string definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
+			" help='Increase/decrease iso scalar value'";
+		const char* def = definition.c_str();
+		g_sprime = (s_max + s_min) / 2;
+		g_ncontours = 1;
+		TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, def);
+		TwAddButton(bar, "Update Iso value / no. of contours", nContours, NULL, " label = 'Load new iso contour after changing value or update no. of contours' ");
+
+		// draw contours
+		nContours(nullptr);
+	}
+}
+
+void updateDataRange(void* clientData) {
+	// Currently only works for temperature in 3DVis. Support for other objects to be added.
+	setupTwBar();
+	color3dStruct();
+}
+
+void TW_CALL setXYCB(const void* value, void* clientData) {
+	g_XYplane = *(const int *)value;
+}
+
+void TW_CALL getXYCB(void* value, void* clientData) {
+	*(int *)value = g_XYplane;
+}
+
+void TW_CALL setYZCB(const void* value, void* clientData) {
+	g_YZplane = *(const int *)value;
+}
+
+void TW_CALL getYZCB(void* value, void* clientData) {
+	*(int *)value = g_YZplane;
+}
+
+void TW_CALL setXZCB(const void* value, void* clientData) {
+	g_XZplane = *(const int *)value;
+}
+
+void TW_CALL getXZCB(void* value, void* clientData) {
+	*(int *)value = g_XZplane;
 }
 
 void TW_CALL loadNewObjCB(void *clientData)
@@ -1156,9 +1474,11 @@ void TW_CALL loadNewObjCB(void *clientData)
 	case 6:
 		strcpy(object_name, "temperature2.dat");
 		break;
+	case 7:
+		strcpy(object_name, "3dVis");
 	}
 
-	if(isPoly)
+	if(isPoly == 0)
 		poly->finalize();
 
 	//Reset();
@@ -1167,37 +1487,36 @@ void TW_CALL loadNewObjCB(void *clientData)
 	if (strstr(object_name, "dat")) {
 		// load dat file and put in same data structure
 		sprintf(tmp_str, "./models/%s", object_name);
-		isPoly = false;
+		isPoly = 1;
 		Load_data_on_uniformGrids(tmp_str);
 		build_edge_list();
 		build_face_list();
+	}
+	else if (strstr(object_name, "3dVis")) {
+		isPoly = 2;
+		// setColorFunction();
+		populate3dStruct();
+		calcLimits();
+		color3dStruct();
+		computeGradient();
+		setupTwBar();
 	}
 	else {
 		sprintf(tmp_str, "./models/%s.ply", object_name);
 		FILE *this_file = fopen(tmp_str, "r");
 		poly = new Polyhedron(this_file);
 		fclose(this_file);
-		isPoly = true;
+		isPoly = 0;
 		poly->initialize(); // initialize everything
 		poly->calc_bounding_sphere();
 		poly->calc_face_normals_and_area();
 		poly->average_normals();
 	}
 
-	calcLimits(); // calc s_max and s_min for the new objects
-	TwRemoveVar(bar, "Iso value");
-	TwRemoveVar(bar, "Update Iso value / no. of contours");
-	float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value
-	std::string definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
-		" help='Increase/decrease iso scalar value'";
-	const char* def = definition.c_str();
-	g_sprime = (s_max + s_min) / 2;
-	g_ncontours = 1;
-	TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, def);
-	TwAddButton(bar, "Update Iso value / no. of contours", nContours, NULL, " label = 'Load new iso contour after changing value or update no. of contours' ");
-
-	// draw contours
-	nContours(nullptr);
+	if (isPoly != 2) {
+		calcLimits(); // calc s_max and s_min for the new objects
+		setupTwBar();
+	}
 
 	g_WhiteThreshold = 0.5; // reset g_WhiteThreshold
 	glutSetWindow(MainWindow);
@@ -1255,7 +1574,7 @@ void InitTwBar()
 		//TwEnumVal shapeEV[NUM_SHAPES] = { { SHAPE_TEAPOT, "Teapot" },{ SHAPE_TORUS, "Torus" },{ SHAPE_CONE, "Cone" },{ BUNNY, "Bunny" } };
 		
 		TwEnumVal shapeEV[NUM_SHAPES] = { { 0, "torus_field" },{ 1, "iceland_current_field" },{ 2, "diesel_field1" },{ 3, "distance_field1" },{ 4, "distance_field2" },
-		{ 5, "temperature1.dat" },{ 6, "temperature2.dat" } };
+		{ 5, "temperature1.dat" },{ 6, "temperature2.dat" }, {7, "3D Vis" } };
 
 		// Create a type for the enum shapeEV
 		TwType shapeType = TwDefineEnum("ShapeType", shapeEV, NUM_SHAPES);
@@ -1283,16 +1602,25 @@ void InitTwBar()
 	TwAddVarRW(bar, "WhiteThreshold", TW_TYPE_FLOAT, &g_WhiteThreshold, 
 		" label = 'Adjust white threshold' min=0 max=1 step=0.01 keyIncr = 'w' keyDecr = 's' help='Increase/decrease white threshold' ");
 
+	// Control the range of values
+	std::string definition = "label='Increase minimum threshold' min=" + std::to_string(s_min) + " max= " + std::to_string(s_max) + " step=" + std::to_string((s_max - s_min) / 1000.);
+	const char* def = definition.c_str();
+	TwAddVarRW(bar, "controlSmin", TW_TYPE_DOUBLE, &s_min, def);
+	definition = "label='Decrease maximum threshold' min=" + std::to_string(s_min) + " max= " + std::to_string(s_max) + " step=" + std::to_string((s_max - s_min) / 1000.);
+	def = definition.c_str();
+	TwAddVarRW(bar, "controlSmax", TW_TYPE_DOUBLE, &s_max, def); // TODO: populate the label
+	TwAddButton(bar, "updateMinMax", updateDataRange, NULL, "label='Update Temp. min/max'");
+
 	//Add modifier for the no. of iso-contours computed and displayed
 	TwAddVarRW(bar, "No. of Iso contours", TW_TYPE_UINT16, &g_ncontours, " label = 'Adjust no. of contours shown' min=1 max=256 step=1 help='Increase/decrease the no. of contours'");
 
 	//Add modifier for the iso-contour value
 	float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value
-	std::string definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
+	definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
 		" help='Increase/decrease iso scalar value'";
-	const char* def = definition.c_str();
+	def = definition.c_str();
 	TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, def);
-	TwAddButton(bar, "Update Iso value / no. of contours", nContours, NULL, " label = 'Load new iso contour after changing value or update no. of contours' ");
+	TwAddButton(bar, "Update Iso value / no. of contours", nContours, NULL, " label = 'Load new iso contour after changing value or update no. of contours' ");	
 }
 
 // Main
