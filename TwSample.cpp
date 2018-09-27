@@ -71,6 +71,8 @@ float g_WhiteThreshold = 0.5;
 float g_sprime = 50;
 //iso contour count
 int g_ncontours = 1;
+// iso surface flag
+bool g_isoSurfaces = false;
 
 int g_Xslice = 25; // default YZ plane at origin
 int g_Yslice = 25; // default XZ plane at origin
@@ -402,10 +404,10 @@ void copyVertices(isoSurfaceNode* s1, isoSurfaceNode* s2, node* n1, node* n2) {
 	n2->z = s2->z;
 }
 
-void computeIsoContours(isoSurfaceNode* n[]) {
+void computeIsoSurfaces(isoSurfaceNode* n[]) {
 	bool intersects[4] = { false, false, false, false };
 	node intersections[4];
-	int ctr;
+	int ctr = 0;
 	for (int l = 0; l < 4; l++) {
 		isoSurfaceNode *s1, *s2;
 		switch (l) {
@@ -519,127 +521,17 @@ void computeIsoContours(isoSurfaceNode* n[]) {
 	}
 }
 
-void computeIsoContours(float g_sprime) {
+void computeIsoSurfaces(float g_sprime) {
 	if (g_sprime < s_min || g_sprime > s_max)
 		return;
+	isosurfacecontours.clear();
 	int i, j, k;
 	for (k = 0; k < NZ3d; k++) {
 		for (i = 0; i < NX3d - 1; i++) {
 			for (j = 0; j < NY3d - 1; j++) {
 				// Process quad whose corner is at [i, j, k] in XY plane
 				isoSurfaceNode* n[4] = { &grid3d[i][j][k], &grid3d[i + 1][j][k], &grid3d[i + 1][j + 1][k], &grid3d[i][j + 1][k] };
-				computeIsoContours(n);
-				/*for (int l = 0; l < 4; l++) {
-					isoSurfaceNode *s1, *s2;
-					switch (l) {
-					case 0:
-						s1 = n[0];
-						s2 = n[1];
-						break;
-					case 1:
-						s1 = n[1];
-						s2 = n[2];
-						break;
-					case 2:
-						s1 = n[2];
-						s2 = n[3];
-						break;
-					case 3:
-						s1 = n[3];
-						s2 = n[0];
-						break;
-					}
-					if (s1->T == s2->T && s1->T != g_sprime)
-						continue;
-					if (s1->T == s2->T && s1->T == g_sprime) {
-						node node1, node2;
-						copyVertices(s1, s2, &node1, &node2);
-						lineseg contour;
-						contour.n1 = node1;
-						contour.n2 = node2;
-						isosurfacecontours.push_back(contour);
-						ctr++;
-						continue;
-					}
-					float tprime;
-					tprime = (g_sprime - s1->T) / (s2->T - s1->T);
-					if (tprime >= 0 && tprime <= 1) {
-						node intersect;
-						ctr++;
-						intersect.x = ((1 - tprime) * s1->x) + (tprime * s2->x);
-						intersect.y = ((1 - tprime) * s1->y) + (tprime * s2->y);
-						intersect.z = ((1 - tprime) * s1->z) + (tprime * s2->z);
-						intersections[l] = intersect;
-						intersects[l] = true;
-					}
-				}
-				if (ctr == 0)
-					continue;
-				if (ctr == 1 || ctr == 3)
-					char *c = "Something is very wrong";
-				if (ctr == 2) {
-					lineseg contour;
-					if (intersects[0]) {
-						contour.n1 = intersections[0];
-						if (intersects[1])
-							contour.n2 = intersections[1];
-						else if (intersects[2])
-							contour.n2 = intersections[2];
-						else
-							contour.n2 = intersections[3];
-					}
-					else if (intersects[1]) {
-						contour.n1 = intersections[1];
-						if (intersects[2])
-							contour.n2 = intersections[2];
-						else
-							contour.n2 = intersections[3];
-					}
-					else {
-						contour.n1 = intersections[2];
-						contour.n2 = intersections[3];
-					}
-					isosurfacecontours.push_back(contour);
-					continue;
-				}
-				if (ctr == 4) {
-					float s0 = n[0]->T;
-					float s1 = n[1]->T;
-					float s2 = n[2]->T;
-					float s3 = n[3]->T;
-					float m = (s0 + s1 + s2 + s3) / 4;
-					lineseg contour1, contour2;
-					if (g_sprime <= m) {
-						if (s0 <= m) {
-							contour1.n1 = intersections[0];
-							contour1.n2 = intersections[3];
-							contour2.n1 = intersections[1];
-							contour2.n2 = intersections[2];
-						}
-						else {
-							contour1.n1 = intersections[0];
-							contour1.n2 = intersections[1];
-							contour2.n1 = intersections[3];
-							contour2.n2 = intersections[2];
-						}
-					}
-					else {
-						if (s0 <= m) {
-							contour1.n1 = intersections[0];
-							contour1.n2 = intersections[1];
-							contour2.n1 = intersections[3];
-							contour2.n2 = intersections[2];
-						}
-						else {
-							contour1.n1 = intersections[0];
-							contour1.n2 = intersections[3];
-							contour2.n1 = intersections[1];
-							contour2.n2 = intersections[2];
-						}
-					}
-					isosurfacecontours.push_back(contour1);
-					isosurfacecontours.push_back(contour2);
-				}*/
+				computeIsoSurfaces(n);
 			}
 		}
 	}
@@ -648,7 +540,7 @@ void computeIsoContours(float g_sprime) {
 			for (j = 0; j < NY3d - 1; j++) {
 				// Process quad whose corner is at [i, j, k] in YZ plane
 				isoSurfaceNode* n[4] = { &grid3d[i][j][k], &grid3d[i][j + 1][k], &grid3d[i][j + 1][k + 1], &grid3d[i][j][k + 1] };
-				computeIsoContours(n);
+				computeIsoSurfaces(n);
 			}
 		}
 	}
@@ -657,7 +549,7 @@ void computeIsoContours(float g_sprime) {
 			for (i = 0; i < NX3d - 1; i++) {
 				// Process quad whose corner is at [i, j, k] in XZ plane
 				isoSurfaceNode* n[4] = { &grid3d[i][j][k], &grid3d[i + 1][j][k], &grid3d[i + 1][j][k + 1], &grid3d[i][j][k + 1] };
-				computeIsoContours(n);
+				computeIsoSurfaces(n);
 			}
 		}
 	}
@@ -1452,6 +1344,19 @@ void draw3dVis() {
 			}
 		}
 	}
+
+	// Draw contours if flag is set
+	if (g_isoSurfaces) {
+		glColor3f(0, 1, 1);
+		for (int i = 0; i < isosurfacecontours.size(); i++) {
+			node* v1 = &isosurfacecontours[i].n1;
+			node* v2 = &isosurfacecontours[i].n2;
+			glBegin(GL_LINES);
+			glVertex3f(v1->x, v1->y, v1->z);
+			glVertex3f(v2->x, v2->y, v2->z);
+			glEnd();
+		}
+	}
 }
 
 // Callback function called by GLUT to render screen
@@ -1636,6 +1541,18 @@ void updateGradient(void* clientData) {
 	color3dStruct();
 }
 
+void TW_CALL setSurfaceCB(const void* value, void* clientData) {
+	g_isoSurfaces = *(const int *)value;
+}
+
+void TW_CALL getSurfaceCB(void* value, void* clientData) {
+	*(int *)value = g_isoSurfaces;
+}
+
+void TW_CALL recomputeIsoSurface(void* clientData) {
+	computeIsoSurfaces(g_sprime);
+}
+
 void setupTwBar() {
 	if (isPoly == 2) {
 		TwRemoveVar(bar, "Iso value");
@@ -1652,6 +1569,7 @@ void setupTwBar() {
 		TwRemoveVar(bar, "controlGradientMin");
 		TwRemoveVar(bar, "controlGradientMax");
 		TwRemoveVar(bar, "updateGradient");
+		TwRemoveVar(bar, "toggleSurfaces");
 		// Control the range of values
 		std::string definition = "label='Increase minimum threshold' min=" + std::to_string(0.0) + " max= " + std::to_string(s_max) + " step=" + std::to_string((s_max - s_min) / 1000.);
 		const char* def = definition.c_str();
@@ -1675,6 +1593,15 @@ void setupTwBar() {
 		def = definition.c_str();
 		TwAddVarRW(bar, "controlGradientMax", TW_TYPE_FLOAT, &g_gradientMax, def);
 		TwAddButton(bar, "updateGradient", updateGradient, NULL, "label='Update Gradient limits'");
+		TwAddVarCB(bar, "toggleSurfaces", TW_TYPE_BOOL32, setSurfaceCB, getSurfaceCB, NULL, "");
+
+		float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value or a plateau
+		g_sprime = (s_max + s_min) / 2;
+		definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
+			" help='Increase/decrease iso scalar value'";
+		def = definition.c_str();
+		TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, def);
+		TwAddButton(bar, "Update Iso value / no. of contours", recomputeIsoSurface, NULL, " label = 'Load new iso surface after changing value");
 	}
 	else {
 		TwRemoveVar(bar, "toggleXY");
@@ -1686,6 +1613,8 @@ void setupTwBar() {
 		TwRemoveVar(bar, "controlGradientMin");
 		TwRemoveVar(bar, "controlGradientMax");
 		TwRemoveVar(bar, "updateGradient");
+		TwRemoveVar(bar, "Iso value");
+		TwRemoveVar(bar, "Update Iso value / no. of contours");
 		float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value
 		std::string definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
 			" help='Increase/decrease iso scalar value'";
@@ -1786,6 +1715,7 @@ void TW_CALL loadNewObjCB(void *clientData)
 		computeGradient();
 		calcLimits();
 		color3dStruct();
+		computeIsoSurfaces(g_sprime);
 		setupTwBar();
 	}
 	else {
