@@ -196,6 +196,7 @@ typedef struct isoSurfaceNode {
 	float rad; // radius
 	float dTdx, dTdy, dTdz;
 	float grad; // total gradient
+	bool draw;
 };
 typedef struct sources {
 	double xc, yc, zc;
@@ -203,8 +204,8 @@ typedef struct sources {
 };
 sources Sources[] = {
 	{1.f, 0.f, 0.f, 90.f},
-	{-1.f, -3.f, 0.f, 120.f},
-	{0.1f, 1.f, 0.f, 120.f},
+	{-1.f, 0.3f, 0.f, 120.f},
+	{0.f, 1.f, 0.f, 120.f},
 	{0.f, 0.4f, 1.f, 170.f}
 };
 
@@ -215,6 +216,8 @@ std::vector<std::vector<lineseg>> rightlines;
 std::vector<std::vector<lineseg>> toplines;
 std::vector<std::vector<quad>> faces;
 std::vector<lineseg> isocontours_t; // stores all contours for triangles
+
+std::vector<lineseg> isosurfacecontours; // stores all contours for quads to be used in drawing the iso surface
 
 const int NX3d = 50, NY3d = 50, NZ3d = 50;
 const double TEMPMAX = 100., TEMPMIN = 0.;
@@ -275,18 +278,18 @@ void computeGradient() {
 }
 
 void populate3dStruct() {
-	double ix = 2. / NX3d;
-	double iy = 2. / NY3d;
+	double ix = 2. / NX3d; // splitting data into 50 samples along the x axis
+	double iy = 2. / NY3d; 
 	double iz = 2. / NZ3d;
 	for (int i = 0; i < NX3d; i++) {
 		for (int j = 0; j < NY3d; j++) {
 			for (int k = 0; k < NZ3d; k++) {
 				isoSurfaceNode node;
-				float rgb[3];
 				node.x = (ix * i) - 1;
 				node.y = (iy * j) - 1;
 				node.z = (iz * k) - 1;
 				node.T = getTemperature(node.x, node.y, node.z);
+				node.draw = true;
 				grid3d[i][j][k] = node;
 			}
 		}
@@ -299,10 +302,12 @@ void color3dStruct() {
 			for (int k = 0; k < NZ3d; k++) {
 				isoSurfaceNode* node;
 				node = &grid3d[i][j][k];
-				if ((node->T >= s_min && node->T <= s_max) && (node->grad >= g_gradientMin && node->grad <= g_gradientMax))
+				if ((node->T >= s_min && node->T <= s_max) && (node->grad >= g_gradientMin && node->grad <= g_gradientMax)) {
 					colorFunction(node->T, node->rgb);
+					node->draw = true;
+				}
 				else
-					node->rgb[0] = node->rgb[1] = node->rgb[2] = 0.;
+					node->draw = false;
 			}
 		}
 	}
@@ -385,6 +390,276 @@ void build_face_list() {
 			tmpf.push_back(face);
 		}
 		faces.push_back(tmpf);
+	}
+}
+
+void copyVertices(isoSurfaceNode* s1, isoSurfaceNode* s2, node* n1, node* n2) {
+	n1->x = s1->x;
+	n1->y = s1->y;
+	n1->z = s1->z;
+	n2->x = s2->x;
+	n2->y = s2->y;
+	n2->z = s2->z;
+}
+
+void computeIsoContours(isoSurfaceNode* n[]) {
+	bool intersects[4] = { false, false, false, false };
+	node intersections[4];
+	int ctr;
+	for (int l = 0; l < 4; l++) {
+		isoSurfaceNode *s1, *s2;
+		switch (l) {
+		case 0:
+			s1 = n[0];
+			s2 = n[1];
+			break;
+		case 1:
+			s1 = n[1];
+			s2 = n[2];
+			break;
+		case 2:
+			s1 = n[2];
+			s2 = n[3];
+			break;
+		case 3:
+			s1 = n[3];
+			s2 = n[0];
+			break;
+		}
+		if (s1->T == s2->T && s1->T != g_sprime)
+			continue;
+		if (s1->T == s2->T && s1->T == g_sprime) {
+			node node1, node2;
+			copyVertices(s1, s2, &node1, &node2);
+			lineseg contour;
+			contour.n1 = node1;
+			contour.n2 = node2;
+			isosurfacecontours.push_back(contour);
+			ctr++;
+			continue;
+		}
+		float tprime;
+		tprime = (g_sprime - s1->T) / (s2->T - s1->T);
+		if (tprime >= 0 && tprime <= 1) {
+			node intersect;
+			ctr++;
+			intersect.x = ((1 - tprime) * s1->x) + (tprime * s2->x);
+			intersect.y = ((1 - tprime) * s1->y) + (tprime * s2->y);
+			intersect.z = ((1 - tprime) * s1->z) + (tprime * s2->z);
+			intersections[l] = intersect;
+			intersects[l] = true;
+		}
+	}
+	if (ctr == 0)
+		return;
+	if (ctr == 1 || ctr == 3)
+		char *c = "Something is very wrong";
+	if (ctr == 2) {
+		lineseg contour;
+		if (intersects[0]) {
+			contour.n1 = intersections[0];
+			if (intersects[1])
+				contour.n2 = intersections[1];
+			else if (intersects[2])
+				contour.n2 = intersections[2];
+			else
+				contour.n2 = intersections[3];
+		}
+		else if (intersects[1]) {
+			contour.n1 = intersections[1];
+			if (intersects[2])
+				contour.n2 = intersections[2];
+			else
+				contour.n2 = intersections[3];
+		}
+		else {
+			contour.n1 = intersections[2];
+			contour.n2 = intersections[3];
+		}
+		isosurfacecontours.push_back(contour);
+		return;
+	}
+	if (ctr == 4) {
+		float s0 = n[0]->T;
+		float s1 = n[1]->T;
+		float s2 = n[2]->T;
+		float s3 = n[3]->T;
+		float m = (s0 + s1 + s2 + s3) / 4;
+		lineseg contour1, contour2;
+		if (g_sprime <= m) {
+			if (s0 <= m) {
+				contour1.n1 = intersections[0];
+				contour1.n2 = intersections[3];
+				contour2.n1 = intersections[1];
+				contour2.n2 = intersections[2];
+			}
+			else {
+				contour1.n1 = intersections[0];
+				contour1.n2 = intersections[1];
+				contour2.n1 = intersections[3];
+				contour2.n2 = intersections[2];
+			}
+		}
+		else {
+			if (s0 <= m) {
+				contour1.n1 = intersections[0];
+				contour1.n2 = intersections[1];
+				contour2.n1 = intersections[3];
+				contour2.n2 = intersections[2];
+			}
+			else {
+				contour1.n1 = intersections[0];
+				contour1.n2 = intersections[3];
+				contour2.n1 = intersections[1];
+				contour2.n2 = intersections[2];
+			}
+		}
+		isosurfacecontours.push_back(contour1);
+		isosurfacecontours.push_back(contour2);
+	}
+}
+
+void computeIsoContours(float g_sprime) {
+	if (g_sprime < s_min || g_sprime > s_max)
+		return;
+	int i, j, k;
+	for (k = 0; k < NZ3d; k++) {
+		for (i = 0; i < NX3d - 1; i++) {
+			for (j = 0; j < NY3d - 1; j++) {
+				// Process quad whose corner is at [i, j, k] in XY plane
+				isoSurfaceNode* n[4] = { &grid3d[i][j][k], &grid3d[i + 1][j][k], &grid3d[i + 1][j + 1][k], &grid3d[i][j + 1][k] };
+				computeIsoContours(n);
+				/*for (int l = 0; l < 4; l++) {
+					isoSurfaceNode *s1, *s2;
+					switch (l) {
+					case 0:
+						s1 = n[0];
+						s2 = n[1];
+						break;
+					case 1:
+						s1 = n[1];
+						s2 = n[2];
+						break;
+					case 2:
+						s1 = n[2];
+						s2 = n[3];
+						break;
+					case 3:
+						s1 = n[3];
+						s2 = n[0];
+						break;
+					}
+					if (s1->T == s2->T && s1->T != g_sprime)
+						continue;
+					if (s1->T == s2->T && s1->T == g_sprime) {
+						node node1, node2;
+						copyVertices(s1, s2, &node1, &node2);
+						lineseg contour;
+						contour.n1 = node1;
+						contour.n2 = node2;
+						isosurfacecontours.push_back(contour);
+						ctr++;
+						continue;
+					}
+					float tprime;
+					tprime = (g_sprime - s1->T) / (s2->T - s1->T);
+					if (tprime >= 0 && tprime <= 1) {
+						node intersect;
+						ctr++;
+						intersect.x = ((1 - tprime) * s1->x) + (tprime * s2->x);
+						intersect.y = ((1 - tprime) * s1->y) + (tprime * s2->y);
+						intersect.z = ((1 - tprime) * s1->z) + (tprime * s2->z);
+						intersections[l] = intersect;
+						intersects[l] = true;
+					}
+				}
+				if (ctr == 0)
+					continue;
+				if (ctr == 1 || ctr == 3)
+					char *c = "Something is very wrong";
+				if (ctr == 2) {
+					lineseg contour;
+					if (intersects[0]) {
+						contour.n1 = intersections[0];
+						if (intersects[1])
+							contour.n2 = intersections[1];
+						else if (intersects[2])
+							contour.n2 = intersections[2];
+						else
+							contour.n2 = intersections[3];
+					}
+					else if (intersects[1]) {
+						contour.n1 = intersections[1];
+						if (intersects[2])
+							contour.n2 = intersections[2];
+						else
+							contour.n2 = intersections[3];
+					}
+					else {
+						contour.n1 = intersections[2];
+						contour.n2 = intersections[3];
+					}
+					isosurfacecontours.push_back(contour);
+					continue;
+				}
+				if (ctr == 4) {
+					float s0 = n[0]->T;
+					float s1 = n[1]->T;
+					float s2 = n[2]->T;
+					float s3 = n[3]->T;
+					float m = (s0 + s1 + s2 + s3) / 4;
+					lineseg contour1, contour2;
+					if (g_sprime <= m) {
+						if (s0 <= m) {
+							contour1.n1 = intersections[0];
+							contour1.n2 = intersections[3];
+							contour2.n1 = intersections[1];
+							contour2.n2 = intersections[2];
+						}
+						else {
+							contour1.n1 = intersections[0];
+							contour1.n2 = intersections[1];
+							contour2.n1 = intersections[3];
+							contour2.n2 = intersections[2];
+						}
+					}
+					else {
+						if (s0 <= m) {
+							contour1.n1 = intersections[0];
+							contour1.n2 = intersections[1];
+							contour2.n1 = intersections[3];
+							contour2.n2 = intersections[2];
+						}
+						else {
+							contour1.n1 = intersections[0];
+							contour1.n2 = intersections[3];
+							contour2.n1 = intersections[1];
+							contour2.n2 = intersections[2];
+						}
+					}
+					isosurfacecontours.push_back(contour1);
+					isosurfacecontours.push_back(contour2);
+				}*/
+			}
+		}
+	}
+	for (i = 0; i < NX3d; i++) {
+		for (k = 0; k < NZ3d - 1; k++) {
+			for (j = 0; j < NY3d - 1; j++) {
+				// Process quad whose corner is at [i, j, k] in YZ plane
+				isoSurfaceNode* n[4] = { &grid3d[i][j][k], &grid3d[i][j + 1][k], &grid3d[i][j + 1][k + 1], &grid3d[i][j][k + 1] };
+				computeIsoContours(n);
+			}
+		}
+	}
+	for (j = 0; j < NY3d; j++) {
+		for (k = 0; k < NZ3d - 1; k++) {
+			for (i = 0; i < NX3d - 1; i++) {
+				// Process quad whose corner is at [i, j, k] in XZ plane
+				isoSurfaceNode* n[4] = { &grid3d[i][j][k], &grid3d[i + 1][j][k], &grid3d[i + 1][j][k + 1], &grid3d[i][j][k + 1] };
+				computeIsoContours(n);
+			}
+		}
 	}
 }
 
@@ -1112,8 +1387,10 @@ void draw3dVis() {
 		for (int i = 0; i < NX3d - 1; i++) {
 			for (int j = 0; j < NY3d - 1; j++) {
 				// construct a plane and color it
-				glBegin(GL_QUADS);
 				curr = grid3d[i][j][g_Zslice];
+				if (!curr.draw)
+					continue;
+				glBegin(GL_QUADS);
 				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
 				glVertex3f(curr.x, curr.y, curr.z);
 				curr = grid3d[i + 1][j][g_Zslice];
@@ -1133,8 +1410,10 @@ void draw3dVis() {
 		for (int j = 0; j < NY3d - 1; j++) {
 			for (int k = 0; k < NZ3d - 1; k++) {
 				// construct a plane and color it
-				glBegin(GL_QUADS);
 				curr = grid3d[g_Xslice][j][k];
+				if (!curr.draw)
+					continue;
+				glBegin(GL_QUADS);				
 				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
 				glVertex3f(curr.x, curr.y, curr.z);
 				curr = grid3d[g_Xslice][j + 1][k];
@@ -1154,8 +1433,10 @@ void draw3dVis() {
 		for (int i = 0; i < NX3d - 1; i++) {
 			for (int k = 0; k < NZ3d - 1; k++) {
 				// construct a plane and color it
-				glBegin(GL_QUADS);
 				curr = grid3d[i][g_Yslice][k];
+				if (!curr.draw)
+					continue;
+				glBegin(GL_QUADS);				
 				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
 				glVertex3f(curr.x, curr.y, curr.z);
 				curr = grid3d[i + 1][g_Yslice][k];
@@ -1225,26 +1506,6 @@ void Display(void)
 
 	//glCallList(g_CurrentShape);
 
-	//decide colorscheme based on choice
-	/*void(*colorFunction)(float, float[]);
-	switch (whichColor)
-	{
-	case 0:
-		colorFunction = &Rainbow_color;
-		break;
-	case 1:
-		colorFunction = &BWR_Divergent;
-		break;
-	case 2:
-		colorFunction = &HeatMap;
-		break;
-	case 3:
-		colorFunction = &Discrete;
-		break;
-	case 4:
-		colorFunction = &NonLinear;
-		break;
-	}*/
 	setColorFunction();
 
 	// Draw the 3D object
