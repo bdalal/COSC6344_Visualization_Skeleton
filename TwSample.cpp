@@ -1603,8 +1603,9 @@ void setupTwBar() {
 		definition = "label='Adjust iso scalar value' min=" + std::to_string(abs_s_min) + " max=" + std::to_string(abs_s_max - difference) + " step=" + std::to_string(difference) +
 			" help='Increase/decrease iso scalar value'";
 		def = definition.c_str();
+		g_sprime = (abs_s_max + abs_s_min) / 2;
 		TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, def);
-		TwAddButton(bar, "Update Iso value / no. of contours", recomputeIsoSurface, NULL, " label = 'Load new iso surface after changing value");
+		TwAddButton(bar, "Update Iso value / no. of contours", recomputeIsoSurface, NULL, " label = 'Load new iso surface after changing value'");
 	}
 	else {
 		TwRemoveVar(bar, "toggleXY");
