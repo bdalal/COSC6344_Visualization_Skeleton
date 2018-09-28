@@ -65,6 +65,7 @@ float g_MatDiffuse[] = { 1.0f, 1.0f, 0.0f, 1.0f };
 float g_LightMultiplier = 1.0f;
 float g_LightDirection[] = { -0.57735f, -0.57735f, -0.57735f };
 double s_min, s_max;
+double abs_s_min, abs_s_max;
 // White threshold
 float g_WhiteThreshold = 0.5;
 //iso scalar value
@@ -196,9 +197,9 @@ typedef struct isoSurfaceNode {
 	double T; // Temperature
 	float rgb[3]; // assigned color
 	float rad; // radius
-	float dTdx, dTdy, dTdz;
+	float dTdx, dTdy, dTdz; // gradient in each direction
 	float grad; // total gradient
-	bool draw;
+	bool draw; // flag to determine if the particular node needs to be drawn or not
 };
 typedef struct sources {
 	double xc, yc, zc;
@@ -1184,6 +1185,8 @@ void calcLimits() {
 				}
 			}
 		}
+		abs_s_max = s_max;
+		abs_s_min = s_min;
 		g_gradientAbsMax = g_gradientMax;
 	}
 }
@@ -1570,6 +1573,7 @@ void setupTwBar() {
 		TwRemoveVar(bar, "controlGradientMax");
 		TwRemoveVar(bar, "updateGradient");
 		TwRemoveVar(bar, "toggleSurfaces");
+		TwRemoveVar(bar, "No. of Iso contours");
 		// Control the range of values
 		std::string definition = "label='Increase minimum threshold' min=" + std::to_string(0.0) + " max= " + std::to_string(s_max) + " step=" + std::to_string((s_max - s_min) / 1000.);
 		const char* def = definition.c_str();
@@ -1595,9 +1599,8 @@ void setupTwBar() {
 		TwAddButton(bar, "updateGradient", updateGradient, NULL, "label='Update Gradient limits'");
 		TwAddVarCB(bar, "toggleSurfaces", TW_TYPE_BOOL32, setSurfaceCB, getSurfaceCB, NULL, "");
 
-		float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value or a plateau
-		g_sprime = (s_max + s_min) / 2;
-		definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
+		float difference = (abs_s_max - abs_s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value or a plateau
+		definition = "label='Adjust iso scalar value' min=" + std::to_string(abs_s_min) + " max=" + std::to_string(abs_s_max - difference) + " step=" + std::to_string(difference) +
 			" help='Increase/decrease iso scalar value'";
 		def = definition.c_str();
 		TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, def);
@@ -1615,7 +1618,9 @@ void setupTwBar() {
 		TwRemoveVar(bar, "updateGradient");
 		TwRemoveVar(bar, "Iso value");
 		TwRemoveVar(bar, "Update Iso value / no. of contours");
-		float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value
+
+		TwAddVarRW(bar, "No. of Iso contours", TW_TYPE_UINT16, &g_ncontours, " label = 'Adjust no. of contours shown' min=1 max=256 step=1 help='Increase/decrease the no. of contours'");
+		float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value or a plateau
 		std::string definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
 			" help='Increase/decrease iso scalar value'";
 		const char* def = definition.c_str();
