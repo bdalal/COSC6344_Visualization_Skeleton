@@ -22,8 +22,11 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <math.h>
 #include <vector>
+
+
+#define _USE_MATH_DEFINES
+#include <math.h>
 
 #if defined(_WIN32) || defined(_WIN64)
 //  MiniGLUT.h is provided to avoid the need of having GLUT installed to 
@@ -53,6 +56,12 @@ int g_CurrentShape = 0;
 // Shapes scale
 float g_Zoom = 1.0f;
 // Shape orientation (stored as a quaternion)
+// First 3 params are x, y and z - the rotation axes
+// The 4th param is w - the rotation angle in radians
+// For glRotate, the rotation angle will be the first param and the axes in order will be the rest
+// Yrot is when y = 1 and x = z = 0
+// Xrot is when x = 1 and y = z = 0
+// Xrot is when x = 1 and y = z = 0
 float g_Rotation[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 // Auto rotate
 int g_AutoRotate = 0;
@@ -74,6 +83,14 @@ float g_sprime = 50;
 int g_ncontours = 1;
 // iso surface flag
 bool g_isoSurfaces = false;
+// bilinear flag
+bool g_bilinear = false;
+// opacity value
+float g_opacity = 1.0;
+// enable/disable slices
+bool g_enableSlices = true;
+// enable/disable DVR
+bool g_enableDVR = false;
 
 int g_Xslice = 25; // default YZ plane at origin
 int g_Yslice = 25; // default XZ plane at origin
@@ -222,9 +239,23 @@ std::vector<lineseg> isocontours_t; // stores all contours for triangles
 
 std::vector<lineseg> isosurfacecontours; // stores all contours for quads to be used in drawing the iso surface
 
-const int NX3d = 50, NY3d = 50, NZ3d = 50;
+const int NX3d = 64, NY3d = 64, NZ3d = 64;
 const double TEMPMAX = 100., TEMPMIN = 0.;
 isoSurfaceNode grid3d[NX3d][NY3d][NZ3d];
+
+unsigned char TextureXY[NZ3d][NY3d][NX3d][4];
+unsigned char TextureXZ[NY3d][NZ3d][NX3d][4];
+unsigned char TextureYZ[NX3d][NZ3d][NY3d][4];
+
+const int MINUS = { 0 };
+const int PLUS = { 1 };
+
+#define X 0
+#define Y 1
+#define Z 2
+
+int Major; /* X, Y, or Z */
+int Xside, Yside, Zside; /* which side is visible, PLUS or MINUS */
 
 void updateDataRange(void* clientData);
 void setupTwBar();
@@ -234,6 +265,221 @@ void TW_CALL setYZCB(const void* value, void* clientData);
 void TW_CALL getYZCB(void* value, void* clientData);
 void TW_CALL setXZCB(const void* value, void* clientData);
 void TW_CALL getXZCB(void* value, void* clientData);
+
+void determineVisibility(float mat[16]) {
+	float nzx, nzy, nzz;
+	nzx = mat[2];
+	nzy = mat[6];
+	nzz = mat[10];
+	/* which sides of the cube are showing:
+	*/
+	/* the Xside being shown to the user is MINUS or PLUS */
+	Xside = (nzx > 0. ? PLUS : MINUS);
+	Yside = (nzy > 0. ? PLUS : MINUS);
+	Zside = (nzz > 0. ? PLUS : MINUS);
+	/* which direction needs to be composited: */
+	if (fabs(nzx) > fabs(nzy) && fabs(nzx) > fabs(nzz))
+		Major = X;
+	else if (fabs(nzy) > fabs(nzx) && fabs(nzy) > fabs(nzz))
+		Major = Y;
+	else
+		Major = Z;
+}
+
+void CompositeXY(void)
+{
+	int x, y, z, zz;
+	float alpha; /* opacity at this voxel */
+	float r, g, b; /* running color composite */
+	for (x = 0; x < NX3d; x++) {
+		for (y = 0; y < NY3d; y++) {
+			r = g = b = 0.;
+			for (zz = 0; zz < NZ3d; zz++) {
+				/* which direction to composite: */
+				if (Zside == PLUS)
+					z = zz;
+				else
+					z = (NZ3d - 1) - zz;
+				isoSurfaceNode* node;
+				node = &grid3d[x][y][z];
+				if ((node->T < s_min || node->T > s_max) || (node->grad < g_gradientMin || node->grad > g_gradientMax)) { // determine whether the value is out of the range set by the range slider
+					r = g = b = 0.;
+					alpha = 0.;
+				}
+				else {
+					r = node->rgb[0];
+					g = node->rgb[1];
+					b = node->rgb[2];
+					alpha = g_opacity;
+				}
+				unsigned char ru = (unsigned char)(255.*r + .5);
+				TextureXY[zz][y][x][0] = (unsigned char)(255.*r + .5);
+				TextureXY[zz][y][x][1] = (unsigned char)(255.*g + .5);
+				TextureXY[zz][y][x][2] = (unsigned char)(255.*b + .5);
+				TextureXY[zz][y][x][3] = (unsigned char)(255.*alpha + .5);
+			}
+		}
+	}
+}
+
+void CompositeYZ(void) {
+	int x, y, z, xx;
+	float alpha; /* opacity at this voxel */
+	float r, g, b; /* running color composite */
+	for (y = 0; y < NY3d; y++) {
+		for (z = 0; z < NZ3d; z++) {
+			r = g = b = 0.;
+			for (xx = 0; xx < NX3d; xx++) {
+				/* which direction to composite: */
+				if (Xside == PLUS)
+					x = xx;
+				else
+					x = (NX3d - 1) - xx;
+				isoSurfaceNode* node;
+				node = &grid3d[x][y][z];
+				if ((node->T < s_min || node->T > s_max) || (node->grad < g_gradientMin || node->grad > g_gradientMax)) { // determine whether the value is out of the range set by the range slider
+					r = g = b = 0.;
+					alpha = 0.;
+				}
+				else {
+					r = node->rgb[0];
+					g = node->rgb[1];
+					b = node->rgb[2];
+					alpha = g_opacity;
+				}
+				TextureYZ[xx][z][y][0] = (unsigned char)(255.*r + .5);
+				TextureYZ[xx][z][y][1] = (unsigned char)(255.*g + .5);
+				TextureYZ[xx][z][y][2] = (unsigned char)(255.*b + .5);
+				TextureYZ[xx][z][y][3] = (unsigned char)(255.*alpha + .5);
+			}
+		}
+	}
+}
+
+void CompositeXZ(void) {
+	int x, y, z, yy;
+	float alpha; /* opacity at this voxel */
+	float r, g, b; /* running color composite */
+	for (x = 0; x < NX3d; x++) {
+		for (z = 0; z < NZ3d; z++) {
+			r = g = b = 0.;
+			for (yy = 0; yy < NY3d; yy++) {
+				/* which direction to composite: */
+				if (Yside == PLUS)
+					y = yy;
+				else
+					y = (NY3d - 1) - yy;
+				isoSurfaceNode* node;
+				node = &grid3d[x][y][z];
+				if ((node->T < s_min || node->T > s_max) || (node->grad < g_gradientMin || node->grad > g_gradientMax)) { // determine whether the value is out of the range set by the range slider
+					r = g = b = 0.;
+					alpha = 0.;
+				}
+				else {
+					r = node->rgb[0];
+					g = node->rgb[1];
+					b = node->rgb[2];
+					alpha = g_opacity;
+				}
+				TextureXZ[yy][z][x][0] = (unsigned char)(255.*r + .5);
+				TextureXZ[yy][z][x][1] = (unsigned char)(255.*g + .5);
+				TextureXZ[yy][z][x][2] = (unsigned char)(255.*b + .5);
+				TextureXZ[yy][z][x][3] = (unsigned char)(255.*alpha + .5);
+			}
+		}
+	}
+}
+
+void drawTexture() {
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+	GLfloat filter = GL_NEAREST;
+	if (g_bilinear)
+		filter = GL_LINEAR;
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glEnable(GL_TEXTURE_2D);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glEnable(GL_BLEND);
+	if (Major == Z) {
+		float z0, dz, zcoord;
+		int z;
+		if (Zside == PLUS) {
+			z0 = -1.;
+			dz = 2. / (float)(NZ3d - 1);
+		}
+		else {
+			z0 = 1.;
+			dz = -2. / (float)(NZ3d - 1);
+		}
+		for (z = 0, zcoord = z0; z < NZ3d; z++, zcoord += dz) {
+			glTexImage2D(GL_TEXTURE_2D, 0, 4, NX3d, NY3d, 0, GL_RGBA, GL_UNSIGNED_BYTE, &TextureXY[z][0][0][0]);
+			glBegin(GL_QUADS);
+			glTexCoord2f(0., 0.);
+			glVertex3f(-1., -1., zcoord);
+			glTexCoord2f(1., 0.);
+			glVertex3f(1., -1., zcoord);
+			glTexCoord2f(1., 1.);
+			glVertex3f(1., 1., zcoord);
+			glTexCoord2f(0., 1.);
+			glVertex3f(-1., 1., zcoord);
+			glEnd();
+		}
+	}
+	else if (Major == Y) {
+		float y0, dy, ycoord;
+		int y;
+		if (Yside == PLUS) {
+			y0 = -1.;
+			dy = 2. / (float)(NY3d - 1);
+		}
+		else {
+			y0 = 1.;
+			dy = -2. / (float)(NY3d - 1);
+		}
+		for (y = 0, ycoord = y0; y < NY3d; y++, ycoord += dy) {
+			glTexImage2D(GL_TEXTURE_2D, 0, 4, NX3d, NZ3d, 0, GL_RGBA, GL_UNSIGNED_BYTE, &TextureXZ[y][0][0][0]);
+			glBegin(GL_QUADS);
+			glTexCoord2f(0., 0.);
+			glVertex3f(-1., ycoord, -1.);
+			glTexCoord2f(1., 0.);
+			glVertex3f(1., ycoord, -1.);
+			glTexCoord2f(1., 1.);
+			glVertex3f(1., ycoord, 1.);
+			glTexCoord2f(0., 1.);
+			glVertex3f(-1., ycoord, 1.);
+			glEnd();
+		}
+	}
+	else {
+		float x0, dx, xcoord;
+		int x;
+		if (Xside == PLUS) {
+			x0 = -1.;
+			dx = 2. / (float)(NX3d - 1);
+		}
+		else {
+			x0 = 1.;
+			dx = -2. / (float)(NX3d - 1);
+		}
+		for (x = 0, xcoord = x0; x < NX3d; x++, xcoord += dx) {
+			glTexImage2D(GL_TEXTURE_2D, 0, 4, NY3d, NZ3d, 0, GL_RGBA, GL_UNSIGNED_BYTE, &TextureYZ[x][0][0][0]);
+			glBegin(GL_QUADS);
+			glTexCoord2f(0., 0.);
+			glVertex3f(xcoord, -1., -1.);
+			glTexCoord2f(1., 0.);
+			glVertex3f(xcoord, 1., -1.);
+			glTexCoord2f(1., 1.);
+			glVertex3f(xcoord, 1., 1.);
+			glTexCoord2f(0., 1.);
+			glVertex3f(xcoord, -1., 1.);
+			glEnd();
+		}
+	}
+	glDisable(GL_TEXTURE_2D);
+}
 
 double getTemperature(double x, double y, double z) {
 	double t = 0.;
@@ -888,8 +1134,7 @@ int GetTimeMs()
 //	(length is the axis length in world coordinates)
 //
 
-void
-Axes(float length)
+void Axes(float length)
 {
 	int i, j;			// counters
 	float fact;			// character scale factor
@@ -970,8 +1215,7 @@ Axes(float length)
 
 }
 
-void
-InitAxesLists(void)
+void InitAxesLists(void)
 {
 	float dx = BOXSIZE / 2.;
 	float dy = BOXSIZE / 2.;
@@ -1412,6 +1656,8 @@ void Display(void)
 	glMultMatrixf(mat);
 	glScalef(g_Zoom, g_Zoom, g_Zoom);
 
+	// TODO: call determineVisibility(), compositeXY(), compositeYZ(), compositeZX() and drawTexture()
+
 	//glCallList(g_CurrentShape);
 
 	setColorFunction();
@@ -1419,8 +1665,19 @@ void Display(void)
 	// Draw the 3D object
 	if (isPoly == 1) drawSquareObject();
 	else if(isPoly == 0) drawTriangularObject();
-	// else draw3dObject(colorFunction);
-	else draw3dVis();
+	//else draw3dObject(colorFunction);
+	else {
+		if (g_enableSlices)
+			draw3dVis();
+		if (g_enableDVR) {
+			determineVisibility(mat);
+			CompositeXY();
+			CompositeXZ();
+			CompositeYZ();
+			drawTexture();
+		}
+	}
+
 
 	// Draw axes
 	if (g_Axes)
@@ -1544,12 +1801,36 @@ void updateGradient(void* clientData) {
 	color3dStruct();
 }
 
+void TW_CALL setDVRCB(const void* value, void* clientData) {
+	g_enableDVR = *(const int *)value;
+}
+
+void TW_CALL getDVRCB(void* value, void* clientData) {
+	*(int *)value = g_enableDVR;
+}
+
+void TW_CALL setSlicesCB(const void* value, void* clientData) {
+	g_enableSlices = *(const int *)value;
+}
+
+void TW_CALL getSlicesCB(void* value, void* clientData) {
+	*(int *)value = g_enableSlices;
+}
+
 void TW_CALL setSurfaceCB(const void* value, void* clientData) {
 	g_isoSurfaces = *(const int *)value;
 }
 
 void TW_CALL getSurfaceCB(void* value, void* clientData) {
 	*(int *)value = g_isoSurfaces;
+}
+
+void TW_CALL setTextureCB(const void* value, void* clientData) {
+	g_bilinear = *(const int *)value;
+}
+
+void TW_CALL getTextureCB(void* value, void* clientData) {
+	*(int *)value = g_bilinear;
 }
 
 void TW_CALL recomputeIsoSurface(void* clientData) {
@@ -1574,6 +1855,10 @@ void setupTwBar() {
 		TwRemoveVar(bar, "updateGradient");
 		TwRemoveVar(bar, "toggleSurfaces");
 		TwRemoveVar(bar, "No. of Iso contours");
+		TwRemoveVar(bar, "updateTexture");
+		TwRemoveVar(bar, "updateOpacity");
+		TwRemoveVar(bar, "toggleDVR");
+		TwRemoveVar(bar, "toggleSlices");
 		// Control the range of values
 		std::string definition = "label='Increase minimum threshold' min=" + std::to_string(0.0) + " max= " + std::to_string(s_max) + " step=" + std::to_string((s_max - s_min) / 1000.);
 		const char* def = definition.c_str();
@@ -1597,8 +1882,8 @@ void setupTwBar() {
 		def = definition.c_str();
 		TwAddVarRW(bar, "controlGradientMax", TW_TYPE_FLOAT, &g_gradientMax, def);
 		TwAddButton(bar, "updateGradient", updateGradient, NULL, "label='Update Gradient limits'");
+		TwAddVarCB(bar, "toggleSlices", TW_TYPE_BOOL32, setSlicesCB, getSlicesCB, NULL, "label='Display slices'");
 		TwAddVarCB(bar, "toggleSurfaces", TW_TYPE_BOOL32, setSurfaceCB, getSurfaceCB, NULL, "");
-
 		float difference = (abs_s_max - abs_s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value or a plateau
 		definition = "label='Adjust iso scalar value' min=" + std::to_string(abs_s_min) + " max=" + std::to_string(abs_s_max - difference) + " step=" + std::to_string(difference) +
 			" help='Increase/decrease iso scalar value'";
@@ -1606,6 +1891,9 @@ void setupTwBar() {
 		g_sprime = (abs_s_max + abs_s_min) / 2;
 		TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, def);
 		TwAddButton(bar, "Update Iso value / no. of contours", recomputeIsoSurface, NULL, " label = 'Load new iso surface after changing value'");
+		TwAddVarCB(bar, "toggleDVR", TW_TYPE_BOOL32, setDVRCB, getDVRCB, NULL, "label='Display 3D Volume'");
+		TwAddVarRW(bar, "updateOpacity", TW_TYPE_FLOAT, &g_opacity, "label='Update opacity' min=0 max=1 step=0.01");
+		TwAddVarCB(bar, "updateTexture", TW_TYPE_BOOL32, setTextureCB, getTextureCB, NULL, "label='Bilinear'");
 	}
 	else {
 		TwRemoveVar(bar, "toggleXY");
@@ -1619,7 +1907,11 @@ void setupTwBar() {
 		TwRemoveVar(bar, "updateGradient");
 		TwRemoveVar(bar, "Iso value");
 		TwRemoveVar(bar, "Update Iso value / no. of contours");
-
+		TwRemoveVar(bar, "updateTexture");
+		TwRemoveVar(bar, "updateOpacity");
+		TwRemoveVar(bar, "toggleSurfaces");
+		TwRemoveVar(bar, "toggleDVR");
+		TwRemoveVar(bar, "toggleSlices");
 		TwAddVarRW(bar, "No. of Iso contours", TW_TYPE_UINT16, &g_ncontours, " label = 'Adjust no. of contours shown' min=1 max=256 step=1 help='Increase/decrease the no. of contours'");
 		float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value or a plateau
 		std::string definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
@@ -1831,7 +2123,7 @@ void InitTwBar()
 	TwAddVarRW(bar, "controlSmin", TW_TYPE_DOUBLE, &s_min, def);
 	definition = "label='Decrease maximum threshold' min=" + std::to_string(s_min) + " max= " + std::to_string(s_max) + " step=" + std::to_string((s_max - s_min) / 1000.);
 	def = definition.c_str();
-	TwAddVarRW(bar, "controlSmax", TW_TYPE_DOUBLE, &s_max, def); // TODO: populate the label
+	TwAddVarRW(bar, "controlSmax", TW_TYPE_DOUBLE, &s_max, def);
 	TwAddButton(bar, "updateMinMax", updateDataRange, NULL, "label='Update Temp. min/max'");
 
 	//Add modifier for the no. of iso-contours computed and displayed
