@@ -1523,72 +1523,74 @@ void draw3dObject(void(*colorFunction)(float s, float rgb[3])) {
 
 void draw3dVis() {
 	isoSurfaceNode curr;
-	if (g_XYplane) {
-		for (int i = 0; i < NX3d - 1; i++) {
+	if (g_enableSlices) {
+		if (g_XYplane) {
+			for (int i = 0; i < NX3d - 1; i++) {
+				for (int j = 0; j < NY3d - 1; j++) {
+					// construct a plane and color it
+					curr = grid3d[i][j][g_Zslice];
+					if (!curr.draw)
+						continue;
+					glBegin(GL_QUADS);
+					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+					glVertex3f(curr.x, curr.y, curr.z);
+					curr = grid3d[i + 1][j][g_Zslice];
+					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+					glVertex3f(curr.x, curr.y, curr.z);
+					curr = grid3d[i + 1][j + 1][g_Zslice];
+					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+					glVertex3f(curr.x, curr.y, curr.z);
+					curr = grid3d[i][j + 1][g_Zslice];
+					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+					glVertex3f(curr.x, curr.y, curr.z);
+					glEnd();
+				}
+			}
+		}
+		if (g_YZplane) {
 			for (int j = 0; j < NY3d - 1; j++) {
-				// construct a plane and color it
-				curr = grid3d[i][j][g_Zslice];
-				if (!curr.draw)
-					continue;
-				glBegin(GL_QUADS);
-				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-				glVertex3f(curr.x, curr.y, curr.z);
-				curr = grid3d[i + 1][j][g_Zslice];
-				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-				glVertex3f(curr.x, curr.y, curr.z);
-				curr = grid3d[i + 1][j + 1][g_Zslice];
-				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-				glVertex3f(curr.x, curr.y, curr.z);
-				curr = grid3d[i][j + 1][g_Zslice];
-				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-				glVertex3f(curr.x, curr.y, curr.z);
-				glEnd();
+				for (int k = 0; k < NZ3d - 1; k++) {
+					// construct a plane and color it
+					curr = grid3d[g_Xslice][j][k];
+					if (!curr.draw)
+						continue;
+					glBegin(GL_QUADS);
+					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+					glVertex3f(curr.x, curr.y, curr.z);
+					curr = grid3d[g_Xslice][j + 1][k];
+					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+					glVertex3f(curr.x, curr.y, curr.z);
+					curr = grid3d[g_Xslice][j + 1][k + 1];
+					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+					glVertex3f(curr.x, curr.y, curr.z);
+					curr = grid3d[g_Xslice][j][k + 1];
+					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+					glVertex3f(curr.x, curr.y, curr.z);
+					glEnd();
+				}
 			}
 		}
-	}
-	if (g_YZplane) {
-		for (int j = 0; j < NY3d - 1; j++) {
-			for (int k = 0; k < NZ3d - 1; k++) {
-				// construct a plane and color it
-				curr = grid3d[g_Xslice][j][k];
-				if (!curr.draw)
-					continue;
-				glBegin(GL_QUADS);				
-				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-				glVertex3f(curr.x, curr.y, curr.z);
-				curr = grid3d[g_Xslice][j + 1][k];
-				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-				glVertex3f(curr.x, curr.y, curr.z);
-				curr = grid3d[g_Xslice][j + 1][k + 1];
-				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-				glVertex3f(curr.x, curr.y, curr.z);
-				curr = grid3d[g_Xslice][j][k + 1];
-				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-				glVertex3f(curr.x, curr.y, curr.z);
-				glEnd();
-			}
-		}
-	}
-	if (g_XZplane) {
-		for (int i = 0; i < NX3d - 1; i++) {
-			for (int k = 0; k < NZ3d - 1; k++) {
-				// construct a plane and color it
-				curr = grid3d[i][g_Yslice][k];
-				if (!curr.draw)
-					continue;
-				glBegin(GL_QUADS);				
-				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-				glVertex3f(curr.x, curr.y, curr.z);
-				curr = grid3d[i + 1][g_Yslice][k];
-				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-				glVertex3f(curr.x, curr.y, curr.z);
-				curr = grid3d[i + 1][g_Yslice][k + 1];
-				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-				glVertex3f(curr.x, curr.y, curr.z);
-				curr = grid3d[i][g_Yslice][k + 1];
-				glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-				glVertex3f(curr.x, curr.y, curr.z);
-				glEnd();
+		if (g_XZplane) {
+			for (int i = 0; i < NX3d - 1; i++) {
+				for (int k = 0; k < NZ3d - 1; k++) {
+					// construct a plane and color it
+					curr = grid3d[i][g_Yslice][k];
+					if (!curr.draw)
+						continue;
+					glBegin(GL_QUADS);
+					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+					glVertex3f(curr.x, curr.y, curr.z);
+					curr = grid3d[i + 1][g_Yslice][k];
+					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+					glVertex3f(curr.x, curr.y, curr.z);
+					curr = grid3d[i + 1][g_Yslice][k + 1];
+					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+					glVertex3f(curr.x, curr.y, curr.z);
+					curr = grid3d[i][g_Yslice][k + 1];
+					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
+					glVertex3f(curr.x, curr.y, curr.z);
+					glEnd();
+				}
 			}
 		}
 	}
@@ -1668,8 +1670,7 @@ void Display(void)
 	else if(isPoly == 0) drawTriangularObject();
 	//else draw3dObject(colorFunction);
 	else {
-		if (g_enableSlices)
-			draw3dVis();
+		draw3dVis();
 		if (g_enableDVR) {
 			determineVisibility(mat);
 			CompositeXY();
@@ -1884,7 +1885,7 @@ void setupTwBar() {
 		TwAddVarRW(bar, "controlGradientMax", TW_TYPE_FLOAT, &g_gradientMax, def);
 		TwAddButton(bar, "updateGradient", updateGradient, NULL, "label='Update Gradient limits'");
 		TwAddVarCB(bar, "toggleSlices", TW_TYPE_BOOL32, setSlicesCB, getSlicesCB, NULL, "label='Display slices'");
-		TwAddVarCB(bar, "toggleSurfaces", TW_TYPE_BOOL32, setSurfaceCB, getSurfaceCB, NULL, "");
+		TwAddVarCB(bar, "toggleSurfaces", TW_TYPE_BOOL32, setSurfaceCB, getSurfaceCB, NULL, "label='Display IsoSurfaces'");
 		float difference = (abs_s_max - abs_s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value or a plateau
 		definition = "label='Adjust iso scalar value' min=" + std::to_string(abs_s_min) + " max=" + std::to_string(abs_s_max - difference) + " step=" + std::to_string(difference) +
 			" help='Increase/decrease iso scalar value'";
