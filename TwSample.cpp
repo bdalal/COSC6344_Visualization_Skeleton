@@ -92,9 +92,6 @@ bool g_enableSlices = true;
 // enable/disable DVR
 bool g_enableDVR = false;
 
-int g_Xslice = 25; // default YZ plane at origin
-int g_Yslice = 25; // default XZ plane at origin
-int g_Zslice = 25; // default XY plane at origin
 
 TwBar *bar = NULL; // Pointer to the tweak bar
 
@@ -242,6 +239,10 @@ std::vector<lineseg> isosurfacecontours; // stores all contours for quads to be 
 const int NX3d = 64, NY3d = 64, NZ3d = 64;
 const double TEMPMAX = 100., TEMPMIN = 0.;
 isoSurfaceNode grid3d[NX3d][NY3d][NZ3d];
+
+int g_Xslice = NX3d / 2; // default YZ plane at origin
+int g_Yslice = NY3d / 2; // default XZ plane at origin
+int g_Zslice = NZ3d / 2; // default XY plane at origin
 
 unsigned char TextureXY[NZ3d][NY3d][NX3d][4];
 unsigned char TextureXZ[NY3d][NZ3d][NX3d][4];
