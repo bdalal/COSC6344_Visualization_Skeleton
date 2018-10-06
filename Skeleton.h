@@ -33,6 +33,7 @@ public:
   double x,y,z;
   float s;
   float vx, vy, vz;
+  float magnitude, angle;
   int index;
 
   int ntris;

@@ -22,6 +22,8 @@ typedef struct Vertex_io {
   float x,y,z;
   float s;
   float vx, vy, vz;
+  float magnitude; // stores the magitude of vector at this vertex
+  float angle; // stores the angle of the vector at this vertex
   void *other_props;       /* other properties */
 } Vertex_io;
 
@@ -39,7 +41,7 @@ PlyProperty vert_props[] = { /* list of property information for a vertex */
   {"x", Float32, Float32, offsetof(Vertex_io,x), 0, 0, 0, 0},
   {"y", Float32, Float32, offsetof(Vertex_io,y), 0, 0, 0, 0},
   {"z", Float32, Float32, offsetof(Vertex_io,z), 0, 0, 0, 0},
-  {"s", Float32, Float32, offsetof(Vertex_io,s), 0, 0, 0, 0},
+  // {"s", Float32, Float32, offsetof(Vertex_io,s), 0, 0, 0, 0},
   {"vx", Float32, Float32, offsetof(Vertex_io,vx), 0, 0, 0, 0},
   {"vy", Float32, Float32, offsetof(Vertex_io,vy), 0, 0, 0, 0},
   {"vz", Float32, Float32, offsetof(Vertex_io,vz), 0, 0, 0, 0}
@@ -87,7 +89,7 @@ Polyhedron::Polyhedron(FILE *file)
 	  setup_property_ply (in_ply, &vert_props[3]);
 	  setup_property_ply (in_ply, &vert_props[4]);
 	  setup_property_ply (in_ply, &vert_props[5]);
-	  setup_property_ply (in_ply, &vert_props[6]);
+	  // setup_property_ply (in_ply, &vert_props[6]);
       PlyOtherProp *vert_other = get_other_properties_ply (in_ply, 
 					     offsetof(Vertex_io,other_props));
 
@@ -99,10 +101,12 @@ Polyhedron::Polyhedron(FILE *file)
         /* copy info from the "vert" structure */
         vlist[j] = new Vertex (vert.x, vert.y, vert.z);
         vlist[j]->other_props = vert.other_props;
-		vlist[j]->s = vert.s;
+		// vlist[j]->s = vert.s;
 		vlist[j]->vx = vert.vx;
 		vlist[j]->vy = vert.vy;
 		vlist[j]->vz = vert.vz;
+		vlist[j]->magnitude = sqrt(pow(vert.vx, 2) + pow(vert.vy, 2) + pow(vert.vz, 2));
+		vlist[j]->angle = atan2(vert.vy, vert.vx);
       }
     }
     else if (equal_strings ("face", elem_name)) {

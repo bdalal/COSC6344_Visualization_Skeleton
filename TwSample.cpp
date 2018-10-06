@@ -49,7 +49,7 @@ int MainWindow;
 // This example displays one of the following shapes
 //typedef enum { SHAPE_TEAPOT=1, SHAPE_TORUS, SHAPE_CONE, BUNNY } Shape;
 
-#define NUM_SHAPES 8
+#define NUM_SHAPES 5
 //Shape g_CurrentShape = SHAPE_TORUS;
 int g_CurrentShape = 0;
 
@@ -73,8 +73,10 @@ float g_MatDiffuse[] = { 1.0f, 1.0f, 0.0f, 1.0f };
 // Light parameter
 float g_LightMultiplier = 1.0f;
 float g_LightDirection[] = { -0.57735f, -0.57735f, -0.57735f };
-double s_min, s_max;
+double s_min, s_max, a_max, a_min, vx_max, vx_min, vy_max, vy_min;
 double abs_s_min, abs_s_max;
+// pointers to max and min values in any dataset
+double *max_ptr, *min_ptr;
 // White threshold
 float g_WhiteThreshold = 0.5;
 //iso scalar value
@@ -88,9 +90,9 @@ bool g_bilinear = false;
 // opacity value
 float g_opacity = 1.0;
 // enable/disable slices
-bool g_enableSlices = true;
+bool g_enableSlices = false;
 // enable/disable DVR
-bool g_enableDVR = false;
+bool g_enableDVR = true;
 
 
 TwBar *bar = NULL; // Pointer to the tweak bar
@@ -114,6 +116,7 @@ const GLfloat Colors[7][3] =
 };
 #define NUM_COLORS 5
 int whichColor = 0;
+int whichPlot = 0;
 
 // the stroke characters 'X' 'Y' 'Z' :
 
@@ -1287,9 +1290,36 @@ void InitAxesLists(void)
 	glEndList();
 }
 
+//TODO: Add parameter to determine which value to color
+//TODO: Setup interface to change which property is visualized
+//TODO: Function to point extreme pointers to correct values
+
+void setExtremePointers() {
+	switch (whichPlot)
+	{
+	case 0:
+		max_ptr = &s_max;
+		min_ptr = &s_min;
+		break;
+	case 1:
+		max_ptr = &a_max;
+		min_ptr = &a_min;
+		break;
+	case 2:
+		max_ptr = &vx_max;
+		min_ptr = &vx_min;
+		break;
+	case 3:
+		max_ptr = &vy_max;
+		min_ptr = &vy_min;
+	default:
+		break;
+	}
+}
+
 void Rainbow_color(float s, float rgb[3])
 {
-	float t = (s - s_min) / (s_max - s_min);
+	float t = (s - *min_ptr) / (*max_ptr - *min_ptr);
 	// make sure t is between 0 and 1, if not, rgb should be black
 	if (t < 0 || t>1) {
 		rgb[0] = rgb[1] = rgb[2] = 0.;
@@ -1304,7 +1334,7 @@ void Rainbow_color(float s, float rgb[3])
 }
 
 void BWR_Divergent(float s, float rgb[3]) {
-	float t = (s - s_min) / (s_max - s_min);
+	float t = (s - *min_ptr) / (*max_ptr - *min_ptr);
 	float hsv[4];
 	hsv[2] = hsv[3] = 1;
 	if (t <= g_WhiteThreshold) {
@@ -1319,7 +1349,7 @@ void BWR_Divergent(float s, float rgb[3]) {
 }
 
 void HeatMap(float s, float rgb[3]) {
-	float t = (s - s_min) / (s_max - s_min);
+	float t = (s - *min_ptr) / (*max_ptr - *min_ptr);
 	if (t <= 0) {
 		rgb[0] = rgb[1] = rgb[2] = 0.; //This is the coldest hence black
 		return;
@@ -1341,11 +1371,8 @@ void HeatMap(float s, float rgb[3]) {
 	 rgb[2] = min((3 * max(t-(2./3.), 0)), 1); // 3 * (min(t-2/3, 1/3))
 }
 
-//TODO Interface to move data range
-
-
 void Discrete(float s, float rgb[3]) {
-	int t = floor((s - s_min) / (s_max - s_min) * 10);
+	int t = floor((s - *min_ptr) / (*max_ptr - *min_ptr) * 10);
 	if (t >= 0 && t <= 5) {
 		rgb[0] = Colors[t][0];
 		rgb[1] = Colors[t][1];
@@ -1360,7 +1387,7 @@ void Discrete(float s, float rgb[3]) {
 }
 
 void NonLinear(float s, float rgb[3]) {
-	float t = (sqrt(s) - sqrt(s_min)) / (sqrt(s_max) - sqrt(s_min));
+	float t = (sqrt(s) - sqrt(*min_ptr)) / (sqrt(*max_ptr) - sqrt(*min_ptr));
 	float hsv[4];
 	hsv[1] = hsv[2] = hsv[3] = 1.;
 	hsv[0] = (1 - t) * 240;
@@ -1389,16 +1416,34 @@ void setColorFunction() {
 
 void calcLimits() {
 	if (isPoly == 0) {
-		s_max = s_min = poly->tlist[0]->verts[0]->s;
+		s_max = s_min = poly->tlist[0]->verts[0]->magnitude;
+		a_max = a_min = poly->tlist[0]->verts[0]->angle;
+		vx_max = vx_min = poly->tlist[0]->verts[0]->vx;
+		vy_max = vy_min = poly->tlist[0]->verts[0]->vy;
 		for (int i = 0; i < poly->ntris; i++) {
 			Triangle *temp_t = poly->tlist[i];
 			for (int j = 0; j < 3; j++) {
 				Vertex *temp_v = temp_t->verts[j];
-				float s = temp_v->s;
-				if (s > s_max)
-					s_max = s;
-				if (s < s_min)
-					s_min = s;
+				float magnitude = temp_v->magnitude;
+				float angle = temp_v->angle;
+				float vx = temp_v->vx;
+				float vy = temp_v->vy;
+				if (magnitude > s_max)
+					s_max = magnitude;
+				if (magnitude < s_min)
+					s_min = magnitude;
+				if (angle > a_max)
+					a_max = angle;
+				if (angle < a_min)
+					a_min = angle;
+				if (vx > vx_max)
+					vx_max = vx;
+				if (vx < vx_min)
+					vx_min = vx;
+				if (vy > vy_max)
+					vy_max = vy;
+				if (vy < vy_min)
+					vy_min = vy;
 			}
 		}
 	}
@@ -1486,15 +1531,22 @@ void drawTriangularObject() {
 			float x = temp_v->x;
 			float y = temp_v->y;
 			float z = temp_v->z;
-			float s = temp_v->s;
-			colorFunction(s, rgb);
+			// float s = temp_v->s;
+			if (whichPlot == 0)
+				colorFunction(temp_v->magnitude, rgb);
+			else if (whichPlot == 1)
+				colorFunction(temp_v->angle, rgb);
+			else if (whichPlot == 2)
+				colorFunction(temp_v->vx, rgb);
+			else if (whichPlot == 3)
+				colorFunction(temp_v->vy, rgb);
 			glColor3f(rgb[0], rgb[1], rgb[2]);
 			glVertex3d(x, y, z);
 		}
 		glEnd();
 	}
 	// draw contours
-	glColor3f(0, 0, 0);
+	/*glColor3f(0, 0, 0);
 	for (int i = 0; i < isocontours_t.size(); i++) {
 		node v1 = isocontours_t[i].n1;
 		node v2 = isocontours_t[i].n2;
@@ -1502,7 +1554,7 @@ void drawTriangularObject() {
 		glVertex3f(v1.x, v1.y, v1.z);
 		glVertex3f(v2.x, v2.y, v2.z);
 		glEnd();
-	}
+	}*/
 }
 
 void draw3dObject(void(*colorFunction)(float s, float rgb[3])) {
@@ -1659,11 +1711,10 @@ void Display(void)
 	glMultMatrixf(mat);
 	glScalef(g_Zoom, g_Zoom, g_Zoom);
 
-	// TODO: call determineVisibility(), compositeXY(), compositeYZ(), compositeZX() and drawTexture()
-
 	//glCallList(g_CurrentShape);
 
 	setColorFunction();
+	setExtremePointers();
 
 	// Draw the 3D object
 	if (isPoly == 1) drawSquareObject();
@@ -1914,18 +1965,18 @@ void setupTwBar() {
 		TwRemoveVar(bar, "toggleSurfaces");
 		TwRemoveVar(bar, "toggleDVR");
 		TwRemoveVar(bar, "toggleSlices");
-		TwAddVarRW(bar, "No. of Iso contours", TW_TYPE_UINT16, &g_ncontours, " label = 'Adjust no. of contours shown' min=1 max=256 step=1 help='Increase/decrease the no. of contours'");
-		float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value or a plateau
-		std::string definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
-			" help='Increase/decrease iso scalar value'";
-		const char* def = definition.c_str();
-		g_sprime = (s_max + s_min) / 2;
-		g_ncontours = 1;
-		TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, def);
-		TwAddButton(bar, "Update Iso value / no. of contours", nContours, NULL, " label = 'Load new iso contour after changing value or update no. of contours' ");
+		//TwAddVarRW(bar, "No. of Iso contours", TW_TYPE_UINT16, &g_ncontours, " label = 'Adjust no. of contours shown' min=1 max=256 step=1 help='Increase/decrease the no. of contours'");
+		//float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value or a plateau
+		//std::string definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
+		//	" help='Increase/decrease iso scalar value'";
+		//const char* def = definition.c_str();
+		//g_sprime = (s_max + s_min) / 2;
+		//g_ncontours = 1;
+		//TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, def);
+		//TwAddButton(bar, "Update Iso value / no. of contours", nContours, NULL, " label = 'Load new iso contour after changing value or update no. of contours' ");
 
-		// draw contours
-		nContours(nullptr);
+		//// draw contours
+		//nContours(nullptr);
 	}
 }
 
@@ -1961,30 +2012,30 @@ void TW_CALL getXZCB(void* value, void* clientData) {
 
 void TW_CALL loadNewObjCB(void *clientData)
 {
-	char object_name[128] = "torus_field";
+	char object_name[128] = "dipole";
 
 	switch (g_CurrentShape) {
 	case 0:
-		strcpy(object_name, "torus_field");
+		strcpy(object_name, "dipole");
 		break;
 
 	case 1:
-		strcpy(object_name, "iceland_current_field");
+		strcpy(object_name, "bruno3");
 		break;
 
 	case 2:
-		strcpy(object_name, "diesel_field1");
+		strcpy(object_name, "cnoise");
 		break;
 
 	case 3:
-		strcpy(object_name, "distance_field1");
+		strcpy(object_name, "bnoise");
 		break;
 
 	case 4:
-		strcpy(object_name, "distance_field2");
+		strcpy(object_name, "vnoise");
 		break;
 	
-	case 5:
+	/*case 5:
 		strcpy(object_name, "temperature1.dat");
 		break;
 
@@ -1992,7 +2043,7 @@ void TW_CALL loadNewObjCB(void *clientData)
 		strcpy(object_name, "temperature2.dat");
 		break;
 	case 7:
-		strcpy(object_name, "3dVis");
+		strcpy(object_name, "3dVis");*/
 	}
 
 	if(isPoly == 0)
@@ -2090,8 +2141,9 @@ void InitTwBar()
 		// ShapeEV associates Shape enum values with labels that will be displayed instead of enum values
 		//TwEnumVal shapeEV[NUM_SHAPES] = { { SHAPE_TEAPOT, "Teapot" },{ SHAPE_TORUS, "Torus" },{ SHAPE_CONE, "Cone" },{ BUNNY, "Bunny" } };
 		
-		TwEnumVal shapeEV[NUM_SHAPES] = { { 0, "torus_field" },{ 1, "iceland_current_field" },{ 2, "diesel_field1" },{ 3, "distance_field1" },{ 4, "distance_field2" },
-		{ 5, "temperature1.dat" },{ 6, "temperature2.dat" }, {7, "3D Vis" } };
+		/*TwEnumVal shapeEV[NUM_SHAPES] = { { 0, "torus_field" },{ 1, "iceland_current_field" },{ 2, "diesel_field1" },{ 3, "distance_field1" },{ 4, "distance_field2" },
+		{ 5, "temperature1.dat" },{ 6, "temperature2.dat" }, {7, "3D Vis" } };*/
+		TwEnumVal shapeEV[NUM_SHAPES] = { {0, "Dipole"}, {1, "Bruno3"}, {2, "Cnoise"}, {3, "Bnoise"}, {4, "Vnoise"} };
 
 		// Create a type for the enum shapeEV
 		TwType shapeType = TwDefineEnum("ShapeType", shapeEV, NUM_SHAPES);
@@ -2120,24 +2172,27 @@ void InitTwBar()
 		" label = 'Adjust white threshold' min=0 max=1 step=0.01 keyIncr = 'w' keyDecr = 's' help='Increase/decrease white threshold' ");
 
 	// Control the range of values
-	std::string definition = "label='Increase minimum threshold' min=" + std::to_string(s_min) + " max= " + std::to_string(s_max) + " step=" + std::to_string((s_max - s_min) / 1000.);
-	const char* def = definition.c_str();
-	TwAddVarRW(bar, "controlSmin", TW_TYPE_DOUBLE, &s_min, def);
-	definition = "label='Decrease maximum threshold' min=" + std::to_string(s_min) + " max= " + std::to_string(s_max) + " step=" + std::to_string((s_max - s_min) / 1000.);
-	def = definition.c_str();
-	TwAddVarRW(bar, "controlSmax", TW_TYPE_DOUBLE, &s_max, def);
-	TwAddButton(bar, "updateMinMax", updateDataRange, NULL, "label='Update Temp. min/max'");
+	//std::string definition = "label='Increase minimum threshold' min=" + std::to_string(s_min) + " max= " + std::to_string(s_max) + " step=" + std::to_string((s_max - s_min) / 1000.);
+	//const char* def = definition.c_str();
+	//TwAddVarRW(bar, "controlSmin", TW_TYPE_DOUBLE, &s_min, def);
+	//definition = "label='Decrease maximum threshold' min=" + std::to_string(s_min) + " max= " + std::to_string(s_max) + " step=" + std::to_string((s_max - s_min) / 1000.);
+	//def = definition.c_str();
+	//TwAddVarRW(bar, "controlSmax", TW_TYPE_DOUBLE, &s_max, def);
+	//TwAddButton(bar, "updateMinMax", updateDataRange, NULL, "label='Update Temp. min/max'");
 
-	//Add modifier for the no. of iso-contours computed and displayed
-	TwAddVarRW(bar, "No. of Iso contours", TW_TYPE_UINT16, &g_ncontours, " label = 'Adjust no. of contours shown' min=1 max=256 step=1 help='Increase/decrease the no. of contours'");
+	////Add modifier for the no. of iso-contours computed and displayed
+	//TwAddVarRW(bar, "No. of Iso contours", TW_TYPE_UINT16, &g_ncontours, " label = 'Adjust no. of contours shown' min=1 max=256 step=1 help='Increase/decrease the no. of contours'");
 
-	//Add modifier for the iso-contour value
-	float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value
-	definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
-		" help='Increase/decrease iso scalar value'";
-	def = definition.c_str();
-	TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, def);
-	TwAddButton(bar, "Update Iso value / no. of contours", nContours, NULL, " label = 'Load new iso contour after changing value or update no. of contours' ");	
+	////Add modifier for the iso-contour value
+	//float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value
+	//definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
+	//	" help='Increase/decrease iso scalar value'";
+	//def = definition.c_str();
+	//TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, def);
+	//TwAddButton(bar, "Update Iso value / no. of contours", nContours, NULL, " label = 'Load new iso contour after changing value or update no. of contours' ");	
+	TwEnumVal VectorPlotEV[4] = { {0, "Magnitude"}, {1, "Angle"}, {2, "X-component"}, {3, "Y-component"} };
+	TwType PlotType = TwDefineEnum("VectorPlotType", VectorPlotEV, 4);
+	TwAddVarRW(bar, "VectorPlot", PlotType, &whichPlot, "label='Plot Type'");
 }
 
 // Main
@@ -2152,7 +2207,7 @@ int main(int argc, char *argv[])
 	// probably no noticeable difference between single and double
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
 	glutInitWindowSize(1024, 768);
-	MainWindow = glutCreateWindow("Assignment 1 – Binoy Dalal");
+	MainWindow = glutCreateWindow("Assignment 6 – Binoy Dalal");
 	glutCreateMenu(NULL);
 
 	// Set GLUT callbacks
@@ -2180,7 +2235,7 @@ int main(int argc, char *argv[])
 
 
 	// Load the model and data here
-	FILE *this_file = fopen("./models/torus_field.ply", "r");
+	FILE *this_file = fopen("./models/dipole.ply", "r");
 	poly = new Polyhedron(this_file);
 	fclose(this_file);
 	poly->initialize(); // initialize everything
@@ -2190,7 +2245,7 @@ int main(int argc, char *argv[])
 	poly->calc_bounding_sphere();
 	poly->calc_face_normals_and_area();
 	poly->average_normals();
-	nContours(nullptr);
+	// nContours(nullptr);
 
 	// Build a display list for the axes
 
