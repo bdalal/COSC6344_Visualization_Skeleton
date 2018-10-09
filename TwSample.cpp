@@ -191,6 +191,8 @@ float g_gradientMin = 0.; // Value of change in the 3dVis
 float g_gradientMax = 0.; // Value of change in the 3dVis
 float g_gradientAbsMax = 0; // Set maximum value for gradient for use in interface
 
+int g_arrows = 0; // Toggle Arrow heads
+
 #include "Skeleton.h"
 Polyhedron *poly = NULL;
 
@@ -1000,6 +1002,38 @@ void SetQuaternionFromAxisAngle(const float *axis, float angle, float *quat)
 	quat[3] = (float)cos(0.5f * angle);
 }
 
+void draw_arrows(double head[2], float direct[2])
+{
+	glColor3f(0., 0., 0.);
+	glPushMatrix();
+	glTranslatef(head[0], head[1], 0);
+	glRotatef(atan2(direct[1], direct[0]) * 360 / (2 * M_PI), 0, 0, 1);
+	// draw arrow head
+	glScalef(0.03, 0.03, 1);
+	glBegin(GL_TRIANGLES);
+	glVertex2f(0, 0);
+	glVertex2f(-0.35, 0.12);
+	glVertex2f(-0.35, -0.12);
+	glEnd();
+	// draw arrow body
+	glScalef(0.3, 0.3, 1);
+	glBegin(GL_LINES);
+	glVertex2f(0, 0);
+	glVertex2f(-3 , 0);
+	glEnd();
+	glPopMatrix();
+}
+
+void drawArrowPlot() {
+	glColor3f(0., 0., 0.);
+	for (int i = 0; i < poly->nverts; i++) {
+		Vertex *temp_v = poly->vlist[i];
+		double arrow_head[2] = { temp_v->x, temp_v->y };
+		float arrow_direct[2] = { temp_v->vx, temp_v->vy };
+		draw_arrows(arrow_head, arrow_direct);
+	}
+}
+
 
 // Routine to convert a quaternion to a 4x4 matrix
 // ( input: quat = float[4]  output: mat = float[4*4] )
@@ -1290,10 +1324,6 @@ void InitAxesLists(void)
 	glEndList();
 }
 
-//TODO: Add parameter to determine which value to color
-//TODO: Setup interface to change which property is visualized
-//TODO: Function to point extreme pointers to correct values
-
 void setExtremePointers() {
 	switch (whichPlot)
 	{
@@ -1545,6 +1575,8 @@ void drawTriangularObject() {
 		}
 		glEnd();
 	}
+	if (g_arrows)
+		drawArrowPlot();
 	// draw contours
 	/*glColor3f(0, 0, 0);
 	for (int i = 0; i < isocontours_t.size(); i++) {
@@ -2010,6 +2042,14 @@ void TW_CALL getXZCB(void* value, void* clientData) {
 	*(int *)value = g_XZplane;
 }
 
+void TW_CALL setArrowCB(const void* value, void* clientData) {
+	g_arrows = *(const int *)value;
+}
+
+void TW_CALL getArrowCB(void* value, void* clientData) {
+	*(int *)value = g_arrows;
+}
+
 void TW_CALL loadNewObjCB(void *clientData)
 {
 	char object_name[128] = "dipole";
@@ -2107,7 +2147,7 @@ void InitTwBar()
 
 	// Add 'g_Zoom' to 'bar': this is a modifable (RW) variable of type TW_TYPE_FLOAT. Its key shortcuts are [z] and [Z].
 	TwAddVarRW(bar, "Zoom", TW_TYPE_FLOAT, &g_Zoom,
-		" min=0.01 max=2.5 step=0.01 keyIncr=z keyDecr=Z help='Scale the object (1=original size).' ");
+		" min=0.01 max=10 step=0.01 keyIncr=z keyDecr=Z help='Scale the object (1=original size).' ");
 
 	// Add 'g_Rotation' to 'bar': this is a variable of type TW_TYPE_QUAT4F which defines the object's orientation
 	TwAddVarRW(bar, "ObjRotation", TW_TYPE_QUAT4F, &g_Rotation,
@@ -2193,6 +2233,7 @@ void InitTwBar()
 	TwEnumVal VectorPlotEV[4] = { {0, "Magnitude"}, {1, "Angle"}, {2, "X-component"}, {3, "Y-component"} };
 	TwType PlotType = TwDefineEnum("VectorPlotType", VectorPlotEV, 4);
 	TwAddVarRW(bar, "VectorPlot", PlotType, &whichPlot, "label='Plot Type'");
+	TwAddVarCB(bar, "toggleArrows", TW_TYPE_BOOL32, setArrowCB, getArrowCB, NULL, "label='Toggle Arrows'");
 }
 
 // Main

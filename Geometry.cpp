@@ -9,10 +9,14 @@ Modified by Guoning Chen 2012
 
 */
 
+#pragma once
 #include "Skeleton.h"
 #include "ply.h"
 #include "icVector.H"
 //#include "icMatrix.H"
+
+#define _USE_MATH_DEFINES
+#include <math.h>
 
 
 
@@ -106,7 +110,7 @@ Polyhedron::Polyhedron(FILE *file)
 		vlist[j]->vy = vert.vy;
 		vlist[j]->vz = vert.vz;
 		vlist[j]->magnitude = sqrt(pow(vert.vx, 2) + pow(vert.vy, 2) + pow(vert.vz, 2));
-		vlist[j]->angle = atan2(vert.vy, vert.vx);
+		vlist[j]->angle = atan2(vert.vy, vert.vx) + M_PI;
       }
     }
     else if (equal_strings ("face", elem_name)) {
