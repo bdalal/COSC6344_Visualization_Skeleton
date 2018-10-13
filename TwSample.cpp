@@ -95,6 +95,8 @@ bool g_enableSlices = false;
 bool g_enableDVR = true;
 // enable/disable original display function
 bool g_DisplayOG = false;
+// enable/disable LIC or colored LIC
+bool g_colorLIC = false;
 
 TwBar *bar = NULL; // Pointer to the tweak bar
 
@@ -255,12 +257,13 @@ unsigned char TextureXZ[NY3d][NZ3d][NX3d][4];
 unsigned char TextureYZ[NX3d][NZ3d][NY3d][4];
 
 //streamline length
-int g_streamLength = 25; // max 256 pixels in either direction
+int g_streamLength = 20; // max 256 pixels in either direction
 // texture images
 const int IMG_RES = 512; // resolution of the image
 unsigned char noise_tex[IMG_RES][IMG_RES][3];
 unsigned char vec_img[IMG_RES][IMG_RES][3];
 unsigned char lic_tex[IMG_RES][IMG_RES][3];
+unsigned char lic_tex_color[IMG_RES][IMG_RES][3];
 
 typedef struct streampoint {
 	int nextX, nextY;
@@ -1593,7 +1596,7 @@ void drawTriangularObject() {
 				colorFunction(temp_v->vx, rgb);
 			else if (whichPlot == 3)
 				colorFunction(temp_v->vy, rgb);
-			glColor3f(rgb[0], rgb[1], rgb[2]);
+			glColor4f(rgb[0], rgb[1], rgb[2], 0.0);
 			glVertex3d(x, y, z);
 		}
 		glEnd();
@@ -1736,7 +1739,10 @@ void DisplayNew(void) {
 	//// Test vector field image (for debugging purpose)
 	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0,	GL_RGB, GL_UNSIGNED_BYTE, vec_img);
 	// Display LIC image using texture mapping
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0,	GL_RGB, GL_UNSIGNED_BYTE, lic_tex);
+	if(!g_colorLIC)
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0,	GL_RGB, GL_UNSIGNED_BYTE, lic_tex);
+	else
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, lic_tex_color);
 	glBegin(GL_QUAD_STRIP);
 	glTexCoord2f(0.0, 0.0); glVertex2f(0.0, 0.0);
 	glTexCoord2f(0.0, 1.0); glVertex2f(0.0, 1.0);
@@ -1744,7 +1750,6 @@ void DisplayNew(void) {
 	glTexCoord2f(1.0, 1.0); glVertex2f(1.0, 1.0);
 	glEnd();
 	glDisable(GL_TEXTURE_2D);
-	// Add you arrow plot here and use a checkbox to enable its visualization
 	if(g_arrows)
 		drawArrowPlot();
 	TwDraw();
@@ -1959,9 +1964,7 @@ void TW_CALL nContours(void *ClientData) { // first draws one contour based on t
 //TODO: interface to toggle between original rendering and vector rendering
 
 //TODO: check regarding arrows not being rendered correctly
-//TODO: figure out about condition for fixed point
 //TODO: check for higher order integration while computing the next points
-//TODO: test implementation
 //TODO: enhanced lic
 //TODO: variable kernel size and interface for the same
 
@@ -1972,9 +1975,13 @@ void computeLIC() {
 	for (int i = 0; i < IMG_RES; i++) {
 		for (int j = 0; j < IMG_RES; j++) {
 			int next_i, next_j;
-			float x, y, vx, vy;
+			float x, y, vx, vy, mag;
 			bool conditions;
 			streamline.clear();
+			/*streampoint point;
+			point.nextX = j;
+			point.nextY = i;
+			streamline.push_back(point);*/
 			// compute streamline in forward direction
 			x = j + 0.5;
 			y = i + 0.5;
@@ -1982,9 +1989,9 @@ void computeLIC() {
 			next_j = j;
 			conditions = !(next_i < 0 || next_j < 0 || next_i >= IMG_RES || next_j >= IMG_RES);
 			for (int l = 0; l < g_streamLength / 2 && conditions; l++) {
-				vx = vx_min + (vx_max - vx_min) * vec_img[next_i][next_j][0] / 255.;
-				vy = vy_min + (vy_max - vy_min) * vec_img[next_i][next_j][1] / 255.;
-				float mag = sqrt(pow(vx, 2) + pow(vy, 2));
+				vx = vx_min + ((vx_max - vx_min) * vec_img[next_i][next_j][0] / 255.);
+				vy = vy_min + ((vy_max - vy_min) * vec_img[next_i][next_j][1] / 255.);
+				mag = sqrt(pow(vx, 2) + pow(vy, 2));
 				if (mag < 0.000001)
 					break;
 				vx /= mag;
@@ -1993,21 +2000,24 @@ void computeLIC() {
 				y += vy;
 				next_j = (int)x;
 				next_i = (int)y;
+				conditions = !(next_i < 0 || next_j < 0 || next_i >= IMG_RES || next_j >= IMG_RES);
+				if (!conditions)
+					break;
 				streampoint point;
 				point.nextX = next_i;
 				point.nextY = next_j;
 				streamline.push_back(point);
 			}
 			// compute streamlines in backward direction
-			x = j + 0.5;
-			y = i + 0.5;
+			x = j - 0.5;
+			y = i - 0.5;
 			next_i = i;
 			next_j = j;
-			conditions = !(next_i <= 0 || next_j <= 0 || next_i >= IMG_RES || next_j >= IMG_RES);
+			conditions = !(next_i < 0 || next_j < 0 || next_i >= IMG_RES || next_j >= IMG_RES);
 			for (int l = 0; l < g_streamLength / 2 && conditions; l++) {
-				vx = vx_min + (vx_max - vx_min) * vec_img[next_i][next_j][0] / 255.;
-				vy = vy_min + (vy_max - vy_min) * vec_img[next_i][next_j][1] / 255.;
-				float mag = sqrt(pow(vx, 2) + pow(vy, 2));
+				vx = vx_min + ((vx_max - vx_min) * vec_img[next_i][next_j][0] / 255.);
+				vy = vy_min + ((vy_max - vy_min) * vec_img[next_i][next_j][1] / 255.);
+				mag = sqrt(pow(vx, 2) + pow(vy, 2));
 				if (mag < 0.000001)
 					break;
 				vx /= mag;
@@ -2016,6 +2026,9 @@ void computeLIC() {
 				y -= vy;
 				next_j = (int)x;
 				next_i = (int)y;
+				conditions = !(next_i < 0 || next_j < 0 || next_i >= IMG_RES || next_j >= IMG_RES);
+				if (!conditions)
+					break;
 				streampoint point;
 				point.nextX = next_i;
 				point.nextY = next_j;
@@ -2038,6 +2051,18 @@ void computeLIC() {
 			lic_tex[i][j][0] = (unsigned char)(totalNr / streamline.size());
 			lic_tex[i][j][1] = (unsigned char)(totalNg / streamline.size());
 			lic_tex[i][j][2] = (unsigned char)(totalNb / streamline.size());
+			// compute the color map based on magnitude for pixel
+			/*vx = vx_min + (vx_max - vx_min) * vec_img[next_i][next_j][0] / 255.;
+			vy = vy_min + (vy_max - vy_min) * vec_img[next_i][next_j][1] / 255.;
+			mag = sqrt(pow(vx, 2) + pow(vy, 2));
+			float rgb[3];
+			Rainbow_color(mag, rgb);*/
+			/*lic_tex_color[i][j][0] = (unsigned char)((lic_tex[i][j][0] * 0.8) * (rgb[0] * 0.8));
+			lic_tex_color[i][j][1] = (unsigned char)((lic_tex[i][j][1] * 0.8) * (rgb[1] * 0.8));
+			lic_tex_color[i][j][2] = (unsigned char)((lic_tex[i][j][2] * 0.8) * (rgb[2] * 0.8));*/
+			/*lic_tex_color[i][j][0] = (unsigned char)((1 + lic_tex[i][j][0]) * rgb[0]);
+			lic_tex_color[i][j][1] = (unsigned char)((1 + lic_tex[i][j][1]) * rgb[1]);
+			lic_tex_color[i][j][2] = (unsigned char)((1 + lic_tex[i][j][2]) * rgb[2]);*/
 		}
 	}
 }
@@ -2211,7 +2236,14 @@ void TW_CALL getArrowCB(void* value, void* clientData) {
 	*(int *)value = g_arrows;
 }
 
-// TODO: figure out where to call this function
+void TW_CALL setColoredCB(const void* value, void* clientData) {
+	g_colorLIC = *(const int *)value;
+}
+
+void TW_CALL getColoredCB(void* value, void* clientData) {
+	*(int *)value = g_colorLIC;
+}
+
 void renderVecImg() {
 	glViewport(0, 0, (GLsizei)IMG_RES, (GLsizei)IMG_RES);
 	glMatrixMode(GL_PROJECTION);
@@ -2224,7 +2256,6 @@ void renderVecImg() {
 		for (i = 0; i < poly->ntris; i++) {
 			Triangle *temp_t = poly->tlist[i];
 			float rgb[3];
-			rgb[2] = 0.5;
 			glBegin(GL_TRIANGLES);
 			for (j = 0; j < 3; j++)
 			{
@@ -2232,6 +2263,7 @@ void renderVecImg() {
 				//determine the color for this vertex based on its vector value
 				rgb[0] = (v->vx - vx_min) / (vx_max - vx_min);
 				rgb[1] = (v->vy - vy_min) / (vy_max - vy_min);
+				rgb[2] = 0.;
 				glColor3f(rgb[0], rgb[1], rgb[2]);
 				glVertex2f(v->x, v->y);
 			}
@@ -2311,13 +2343,18 @@ void TW_CALL loadNewObjCB(void *clientData)
 		poly->calc_bounding_sphere();
 		poly->calc_face_normals_and_area();
 		poly->average_normals();
-		// renderVecImg();
+		calcLimits();
+		/*setColorFunction();
+		setExtremePointers();*/
+		setupTwBar();
+		renderVecImg();
+		computeLIC();
 	}
 
-	if (isPoly != 2) {
-		calcLimits(); // calc s_max and s_min for the new objects
-		setupTwBar();
-	}
+	//if (isPoly != 2) {
+	//	calcLimits(); // calc s_max and s_min for the new objects
+	//	setupTwBar();
+	//}
 
 	g_WhiteThreshold = 0.5; // reset g_WhiteThreshold
 	glutSetWindow(MainWindow);
@@ -2329,7 +2366,7 @@ void InitTwBar()
 	// Create a tweak bar
 	bar = TwNewBar("TweakBar");
 	TwDefine(" GLOBAL help='This example shows how to integrate AntTweakBar with GLUT and OpenGL.' "); // Message added to the help bar.
-	TwDefine(" TweakBar size='200 800' color='0 128 255' alpha=128  "); // change default tweak bar size and color
+	TwDefine(" TweakBar size='200 700' color='0 128 255' alpha=128  "); // change default tweak bar size and color
 	TwDefine(" TweakBar  label='Visual Parameters'");        // change the title of the Tweakbar
 
 	// Add callback to toggle reference axes (callback functions are defined above).
@@ -2427,6 +2464,7 @@ void InitTwBar()
 	TwType PlotType = TwDefineEnum("VectorPlotType", VectorPlotEV, 4);
 	TwAddVarRW(bar, "VectorPlot", PlotType, &whichPlot, "label='Plot Type'");
 	TwAddVarCB(bar, "toggleArrows", TW_TYPE_BOOL32, setArrowCB, getArrowCB, NULL, "label='Toggle Arrows'");
+	TwAddVarCB(bar, "toggleColoredLIC", TW_TYPE_BOOL32, setColoredCB, getColoredCB, NULL, "label='Toggle Colored LIC'");
 }
 
 // Main
@@ -2474,11 +2512,13 @@ int main(int argc, char *argv[])
 	fclose(this_file);
 	poly->initialize(); // initialize everything
 
-	calcLimits(); // calculate s_max and s_min for the default figure
+	calcLimits(); // calculate limits for the default figure
 
 	poly->calc_bounding_sphere();
 	poly->calc_face_normals_and_area();
 	poly->average_normals();
+	setColorFunction();
+	setExtremePointers();
 	gen_noise_tex();
 	renderVecImg();
 	computeLIC();
