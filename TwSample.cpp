@@ -93,7 +93,8 @@ float g_opacity = 1.0;
 bool g_enableSlices = false;
 // enable/disable DVR
 bool g_enableDVR = true;
-
+// enable/disable original display function
+bool g_DisplayOG = false;
 
 TwBar *bar = NULL; // Pointer to the tweak bar
 
@@ -253,6 +254,20 @@ unsigned char TextureXY[NZ3d][NY3d][NX3d][4];
 unsigned char TextureXZ[NY3d][NZ3d][NX3d][4];
 unsigned char TextureYZ[NX3d][NZ3d][NY3d][4];
 
+//streamline length
+int g_streamLength = 25; // max 256 pixels in either direction
+// texture images
+const int IMG_RES = 512; // resolution of the image
+unsigned char noise_tex[IMG_RES][IMG_RES][3];
+unsigned char vec_img[IMG_RES][IMG_RES][3];
+unsigned char lic_tex[IMG_RES][IMG_RES][3];
+
+typedef struct streampoint {
+	int nextX, nextY;
+};
+
+std::vector<streampoint> streamline;
+
 const int MINUS = { 0 };
 const int PLUS = { 1 };
 
@@ -271,6 +286,15 @@ void TW_CALL setYZCB(const void* value, void* clientData);
 void TW_CALL getYZCB(void* value, void* clientData);
 void TW_CALL setXZCB(const void* value, void* clientData);
 void TW_CALL getXZCB(void* value, void* clientData);
+
+void gen_noise_tex() {
+	for (int x = 0; x < IMG_RES; x++) {
+		for (int y = 0; y < IMG_RES; y++) {
+			float noise = 255 * (rand() % 32768) / 32768.0;
+			noise_tex[x][y][0] = noise_tex[x][y][1] = noise_tex[x][y][2] = (unsigned char)noise;
+		}
+	}
+}
 
 void determineVisibility(float mat[16]) {
 	float nzx, nzy, nzz;
@@ -1004,7 +1028,7 @@ void SetQuaternionFromAxisAngle(const float *axis, float angle, float *quat)
 
 void draw_arrows(double head[2], float direct[2])
 {
-	glColor3f(0., 0., 0.);
+	glColor3f(1., 1., 0.);
 	glPushMatrix();
 	glTranslatef(head[0], head[1], 0);
 	glRotatef(atan2(direct[1], direct[0]) * 360 / (2 * M_PI), 0, 0, 1);
@@ -1016,7 +1040,7 @@ void draw_arrows(double head[2], float direct[2])
 	glVertex2f(-0.35, -0.12);
 	glEnd();
 	// draw arrow body
-	glScalef(0.3, 0.3, 1);
+	glScalef(0.2, 0.2, 1);
 	glBegin(GL_LINES);
 	glVertex2f(0, 0);
 	glVertex2f(-3 , 0);
@@ -1025,7 +1049,6 @@ void draw_arrows(double head[2], float direct[2])
 }
 
 void drawArrowPlot() {
-	glColor3f(0., 0., 0.);
 	for (int i = 0; i < poly->nverts; i++) {
 		Vertex *temp_v = poly->vlist[i];
 		double arrow_head[2] = { temp_v->x, temp_v->y };
@@ -1693,8 +1716,45 @@ void draw3dVis() {
 	}
 }
 
+// TODO: add arrow plot and vector color plot rendering to this display function
+// TODO: finish display function
+void DisplayNew(void) {
+	glViewport(0, 0, (GLsizei)IMG_RES, (GLsizei)IMG_RES);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluOrtho2D(0, 1, 0, 1);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+	glEnable(GL_TEXTURE_2D);
+	glShadeModel(GL_FLAT);
+	////Test noise texture (for debugging purpose)
+	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0,	GL_RGB, GL_UNSIGNED_BYTE, noise_tex);
+	//// Test vector field image (for debugging purpose)
+	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0,	GL_RGB, GL_UNSIGNED_BYTE, vec_img);
+	// Display LIC image using texture mapping
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0,	GL_RGB, GL_UNSIGNED_BYTE, lic_tex);
+	glBegin(GL_QUAD_STRIP);
+	glTexCoord2f(0.0, 0.0); glVertex2f(0.0, 0.0);
+	glTexCoord2f(0.0, 1.0); glVertex2f(0.0, 1.0);
+	glTexCoord2f(1.0, 0.0); glVertex2f(1.0, 0.0);
+	glTexCoord2f(1.0, 1.0); glVertex2f(1.0, 1.0);
+	glEnd();
+	glDisable(GL_TEXTURE_2D);
+	// Add you arrow plot here and use a checkbox to enable its visualization
+	if(g_arrows)
+		drawArrowPlot();
+	TwDraw();
+	glutSwapBuffers();
+	glFlush();
+	glutPostRedisplay();
+}
+
 // Callback function called by GLUT to render screen
-void Display(void)
+void DisplayOG(void)
 {
 	float v[4]; // will be used to set light parameters
 	float mat[4 * 4]; // rotation matrix
@@ -1750,7 +1810,7 @@ void Display(void)
 
 	// Draw the 3D object
 	if (isPoly == 1) drawSquareObject();
-	else if(isPoly == 0) drawTriangularObject();
+	else if (isPoly == 0) drawTriangularObject();
 	//else draw3dObject(colorFunction);
 	else {
 		draw3dVis();
@@ -1779,6 +1839,19 @@ void Display(void)
 
 	// Recall Display at next frame
 	glutPostRedisplay();
+}
+
+void ReshapeNew(int width, int height) {
+	// Set OpenGL viewport and camera
+	glViewport(0, 0, (GLsizei)width, (GLsizei)height);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluOrtho2D(0, 1, 0, 1);
+	glClearColor(0, 0, 0, 1);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	// Send the new window size to AntTweakBar
+	TwWindowSize(width, height);
 }
 
 // Callback function called by GLUT when window size changes
@@ -1877,6 +1950,94 @@ void TW_CALL nContours(void *ClientData) { // first draws one contour based on t
 			if (sprime_i == s_min) sprime_i += buffer; // buffer to protect against extreme values where only 1 point may be present
 			else if (sprime_i == s_max) sprime_i -= buffer;
 			computeContoursTriangles(sprime_i);
+		}
+	}
+}
+
+//TODO: interface to toggle between color plots and texture based imgs
+//TODO: interface to modify streamline length
+//TODO: interface to toggle between original rendering and vector rendering
+
+//TODO: check regarding arrows not being rendered correctly
+//TODO: figure out about condition for fixed point
+//TODO: check for higher order integration while computing the next points
+//TODO: test implementation
+//TODO: enhanced lic
+//TODO: variable kernel size and interface for the same
+
+void computeLIC() {
+	/*For each pixel
+		Compute a streamline using the vector field image in forward and backward direction (the streamline computation is terminated when the desired number of pixels is reached).
+		Accumulate the color values from the pixels obtained in the previous step*/
+	for (int i = 0; i < IMG_RES; i++) {
+		for (int j = 0; j < IMG_RES; j++) {
+			int next_i, next_j;
+			float x, y, vx, vy;
+			bool conditions;
+			streamline.clear();
+			// compute streamline in forward direction
+			x = j + 0.5;
+			y = i + 0.5;
+			next_i = i;
+			next_j = j;
+			conditions = !(next_i < 0 || next_j < 0 || next_i >= IMG_RES || next_j >= IMG_RES);
+			for (int l = 0; l < g_streamLength / 2 && conditions; l++) {
+				vx = vx_min + (vx_max - vx_min) * vec_img[next_i][next_j][0] / 255.;
+				vy = vy_min + (vy_max - vy_min) * vec_img[next_i][next_j][1] / 255.;
+				float mag = sqrt(pow(vx, 2) + pow(vy, 2));
+				if (mag < 0.000001)
+					break;
+				vx /= mag;
+				vy /= mag;
+				x += vx;
+				y += vy;
+				next_j = (int)x;
+				next_i = (int)y;
+				streampoint point;
+				point.nextX = next_i;
+				point.nextY = next_j;
+				streamline.push_back(point);
+			}
+			// compute streamlines in backward direction
+			x = j + 0.5;
+			y = i + 0.5;
+			next_i = i;
+			next_j = j;
+			conditions = !(next_i <= 0 || next_j <= 0 || next_i >= IMG_RES || next_j >= IMG_RES);
+			for (int l = 0; l < g_streamLength / 2 && conditions; l++) {
+				vx = vx_min + (vx_max - vx_min) * vec_img[next_i][next_j][0] / 255.;
+				vy = vy_min + (vy_max - vy_min) * vec_img[next_i][next_j][1] / 255.;
+				float mag = sqrt(pow(vx, 2) + pow(vy, 2));
+				if (mag < 0.000001)
+					break;
+				vx /= mag;
+				vy /= mag;
+				x -= vx;
+				y -= vy;
+				next_j = (int)x;
+				next_i = (int)y;
+				streampoint point;
+				point.nextX = next_i;
+				point.nextY = next_j;
+				streamline.push_back(point);
+			}
+			// compute the averaged color for the pixel
+			float totalNr, totalNg, totalNb, totalDr, totalDg, totalDb;
+			totalNr = totalNg = totalNb = totalDr = totalDg = totalDb = 0.;
+			for (int k = 0; k < streamline.size(); k++) {
+				int xp = streamline[k].nextX;
+				int yp = streamline[k].nextY;
+				float r, g, b;
+				r = (float)noise_tex[xp][yp][0];
+				g = (float)noise_tex[xp][yp][1];
+				b = (float)noise_tex[xp][yp][2];
+				totalNr += r;
+				totalNg += g;
+				totalNb += b;
+			}
+			lic_tex[i][j][0] = (unsigned char)(totalNr / streamline.size());
+			lic_tex[i][j][1] = (unsigned char)(totalNg / streamline.size());
+			lic_tex[i][j][2] = (unsigned char)(totalNb / streamline.size());
 		}
 	}
 }
@@ -2050,6 +2211,37 @@ void TW_CALL getArrowCB(void* value, void* clientData) {
 	*(int *)value = g_arrows;
 }
 
+// TODO: figure out where to call this function
+void renderVecImg() {
+	glViewport(0, 0, (GLsizei)IMG_RES, (GLsizei)IMG_RES);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluOrtho2D(0, 1, 0, 1);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDrawBuffer(GL_BACK);
+	int i, j;
+		// render the mesh
+		for (i = 0; i < poly->ntris; i++) {
+			Triangle *temp_t = poly->tlist[i];
+			float rgb[3];
+			rgb[2] = 0.5;
+			glBegin(GL_TRIANGLES);
+			for (j = 0; j < 3; j++)
+			{
+				Vertex *v = temp_t->verts[j];
+				//determine the color for this vertex based on its vector value
+				rgb[0] = (v->vx - vx_min) / (vx_max - vx_min);
+				rgb[1] = (v->vy - vy_min) / (vy_max - vy_min);
+				glColor3f(rgb[0], rgb[1], rgb[2]);
+				glVertex2f(v->x, v->y);
+			}
+			glEnd();
+		}
+	// save the rendered image into the vec_img
+	glReadBuffer(GL_BACK);
+	glReadPixels(0, 0, IMG_RES, IMG_RES, GL_RGB, GL_UNSIGNED_BYTE, vec_img);
+}
+
 void TW_CALL loadNewObjCB(void *clientData)
 {
 	char object_name[128] = "dipole";
@@ -2119,6 +2311,7 @@ void TW_CALL loadNewObjCB(void *clientData)
 		poly->calc_bounding_sphere();
 		poly->calc_face_normals_and_area();
 		poly->average_normals();
+		// renderVecImg();
 	}
 
 	if (isPoly != 2) {
@@ -2252,8 +2445,8 @@ int main(int argc, char *argv[])
 	glutCreateMenu(NULL);
 
 	// Set GLUT callbacks
-	glutDisplayFunc(Display); // Display is a function pointer - function contains info. about objects to be drawn on the screen
-	glutReshapeFunc(Reshape); // Reshape function tells how resizing the window will affect the graphics on screen
+	glutDisplayFunc(DisplayNew); // DisplayOG is a function pointer to the original display function - function contains info. about objects to be drawn on the screen
+	glutReshapeFunc(ReshapeNew); // Reshape function tells how resizing the window will affect the graphics on screen
 	atexit(Terminate);  // Called after glutMainLoop ends
 
 	// Initialize AntTweakBar
@@ -2286,6 +2479,9 @@ int main(int argc, char *argv[])
 	poly->calc_bounding_sphere();
 	poly->calc_face_normals_and_area();
 	poly->average_normals();
+	gen_noise_tex();
+	renderVecImg();
+	computeLIC();
 	// nContours(nullptr);
 
 	// Build a display list for the axes
