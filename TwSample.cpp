@@ -95,8 +95,12 @@ bool g_enableSlices = false;
 bool g_enableDVR = true;
 // enable/disable original display function
 bool g_DisplayOG = false;
-// enable/disable LIC or colored LIC
-bool g_colorLIC = false;
+// enable/disable enhanced LIC
+bool g_enhanceLIC = false;
+// enable/disable colorplot
+bool g_colorPlot = false;
+// enable/disable colored LIC
+bool g_coloredLIC = false;
 
 TwBar *bar = NULL; // Pointer to the tweak bar
 
@@ -263,6 +267,7 @@ const int IMG_RES = 512; // resolution of the image
 unsigned char noise_tex[IMG_RES][IMG_RES][3];
 unsigned char vec_img[IMG_RES][IMG_RES][3];
 unsigned char lic_tex[IMG_RES][IMG_RES][3];
+unsigned char lic_tex_enhanced[IMG_RES][IMG_RES][3];
 unsigned char lic_tex_color[IMG_RES][IMG_RES][3];
 
 typedef struct streampoint {
@@ -289,6 +294,9 @@ void TW_CALL setYZCB(const void* value, void* clientData);
 void TW_CALL getYZCB(void* value, void* clientData);
 void TW_CALL setXZCB(const void* value, void* clientData);
 void TW_CALL getXZCB(void* value, void* clientData);
+void DisplayOG(void);
+void Reshape(int width, int height);
+void ReshapeNew(int width, int height);
 
 void gen_noise_tex() {
 	for (int x = 0; x < IMG_RES; x++) {
@@ -1031,11 +1039,15 @@ void SetQuaternionFromAxisAngle(const float *axis, float angle, float *quat)
 
 void draw_arrows(double head[2], float direct[2])
 {
-	glColor3f(1., 1., 0.);
+	if (g_colorPlot)
+		glColor3f(0., 0., 0.);
+	else
+		glColor3f(1., 1., 0.);
 	glPushMatrix();
 	glTranslatef(head[0], head[1], 0);
 	glRotatef(atan2(direct[1], direct[0]) * 360 / (2 * M_PI), 0, 0, 1);
 	// draw arrow head
+	//glScalef(0.03, 0.03, 1);
 	glScalef(0.03, 0.03, 1);
 	glBegin(GL_TRIANGLES);
 	glVertex2f(0, 0);
@@ -1043,7 +1055,8 @@ void draw_arrows(double head[2], float direct[2])
 	glVertex2f(-0.35, -0.12);
 	glEnd();
 	// draw arrow body
-	glScalef(0.2, 0.2, 1);
+	glScalef(0.3, 0.3, 1);
+	//glScalef(100. / poly->nverts, 100. / poly->nverts, 1);
 	glBegin(GL_LINES);
 	glVertex2f(0, 0);
 	glVertex2f(-3 , 0);
@@ -1596,7 +1609,7 @@ void drawTriangularObject() {
 				colorFunction(temp_v->vx, rgb);
 			else if (whichPlot == 3)
 				colorFunction(temp_v->vy, rgb);
-			glColor4f(rgb[0], rgb[1], rgb[2], 0.0);
+			glColor4f(rgb[0], rgb[1], rgb[2], 1);
 			glVertex3d(x, y, z);
 		}
 		glEnd();
@@ -1719,30 +1732,34 @@ void draw3dVis() {
 	}
 }
 
-// TODO: add arrow plot and vector color plot rendering to this display function
+// TODO: add vector color plot rendering to this display function
 // TODO: finish display function
 void DisplayNew(void) {
 	glViewport(0, 0, (GLsizei)IMG_RES, (GLsizei)IMG_RES);
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
 	gluOrtho2D(0, 1, 0, 1);
+	glEnable(GL_TEXTURE_2D);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glClear(GL_COLOR_BUFFER_BIT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-	glEnable(GL_TEXTURE_2D);
 	glShadeModel(GL_FLAT);
 	////Test noise texture (for debugging purpose)
 	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0,	GL_RGB, GL_UNSIGNED_BYTE, noise_tex);
 	//// Test vector field image (for debugging purpose)
 	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0,	GL_RGB, GL_UNSIGNED_BYTE, vec_img);
 	// Display LIC image using texture mapping
-	if(!g_colorLIC)
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0,	GL_RGB, GL_UNSIGNED_BYTE, lic_tex);
-	else
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, lic_tex_color);
+	if (!g_enhanceLIC)
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, lic_tex);
+	else if (g_enhanceLIC)
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, lic_tex_enhanced);
+	//else if (g_colorPlot)
+		//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, lic_tex_color);
 	glBegin(GL_QUAD_STRIP);
 	glTexCoord2f(0.0, 0.0); glVertex2f(0.0, 0.0);
 	glTexCoord2f(0.0, 1.0); glVertex2f(0.0, 1.0);
@@ -1752,6 +1769,32 @@ void DisplayNew(void) {
 	glDisable(GL_TEXTURE_2D);
 	if(g_arrows)
 		drawArrowPlot();
+	if (g_coloredLIC) {
+		glShadeModel(GL_SMOOTH);
+		setColorFunction();
+		setExtremePointers();
+		for (int i = 0; i < poly->ntris; i++) {
+			Triangle *t = poly->tlist[i];
+			glBegin(GL_POLYGON);
+			for (int j = 0; j < 3; j++) {
+				Vertex *v = t->verts[j];
+				glNormal3d(v->normal.entry[0], v->normal.entry[1], v->normal.entry[2]);
+				float rgb[3];
+				colorFunction(v->magnitude, rgb);
+				glColor4f(rgb[0], rgb[1], rgb[2], 0.45);
+				glVertex3d(v->x, v->y, v->z);
+			}
+			glEnd();
+		}
+	}
+	if (g_colorPlot) {
+		g_coloredLIC = false;
+		glDisable(GL_BLEND);
+		glShadeModel(GL_SMOOTH);
+		setColorFunction();
+		setExtremePointers();
+		drawTriangularObject();
+	}
 	TwDraw();
 	glutSwapBuffers();
 	glFlush();
@@ -1960,12 +2003,9 @@ void TW_CALL nContours(void *ClientData) { // first draws one contour based on t
 }
 
 //TODO: interface to toggle between color plots and texture based imgs
-//TODO: interface to modify streamline length
-//TODO: interface to toggle between original rendering and vector rendering
 
 //TODO: check regarding arrows not being rendered correctly
 //TODO: check for higher order integration while computing the next points
-//TODO: enhanced lic
 //TODO: variable kernel size and interface for the same
 
 void computeLIC() {
@@ -1978,10 +2018,6 @@ void computeLIC() {
 			float x, y, vx, vy, mag;
 			bool conditions;
 			streamline.clear();
-			/*streampoint point;
-			point.nextX = j;
-			point.nextY = i;
-			streamline.push_back(point);*/
 			// compute streamline in forward direction
 			x = j + 0.5;
 			y = i + 0.5;
@@ -2035,8 +2071,8 @@ void computeLIC() {
 				streamline.push_back(point);
 			}
 			// compute the averaged color for the pixel
-			float totalNr, totalNg, totalNb, totalDr, totalDg, totalDb;
-			totalNr = totalNg = totalNb = totalDr = totalDg = totalDb = 0.;
+			float totalNr, totalNg, totalNb;
+			totalNr = totalNg = totalNb = 0.;
 			for (int k = 0; k < streamline.size(); k++) {
 				int xp = streamline[k].nextX;
 				int yp = streamline[k].nextY;
@@ -2051,18 +2087,34 @@ void computeLIC() {
 			lic_tex[i][j][0] = (unsigned char)(totalNr / streamline.size());
 			lic_tex[i][j][1] = (unsigned char)(totalNg / streamline.size());
 			lic_tex[i][j][2] = (unsigned char)(totalNb / streamline.size());
+			// compute enhanced LIC
+			totalNr = totalNg = totalNb = 0.;
+			for (int k = 0; k < streamline.size(); k++) {
+				int xp = streamline[k].nextX;
+				int yp = streamline[k].nextY;
+				float r, g, b;
+				r = (float)lic_tex[xp][yp][0];
+				g = (float)lic_tex[xp][yp][1];
+				b = (float)lic_tex[xp][yp][2];
+				totalNr += r;
+				totalNg += g;
+				totalNb += b;
+			}
+			lic_tex_enhanced[i][j][0] = (unsigned char)(totalNr / streamline.size());
+			lic_tex_enhanced[i][j][1] = (unsigned char)(totalNg / streamline.size());
+			lic_tex_enhanced[i][j][2] = (unsigned char)(totalNb / streamline.size());
 			// compute the color map based on magnitude for pixel
-			/*vx = vx_min + (vx_max - vx_min) * vec_img[next_i][next_j][0] / 255.;
+			vx = vx_min + (vx_max - vx_min) * vec_img[next_i][next_j][0] / 255.;
 			vy = vy_min + (vy_max - vy_min) * vec_img[next_i][next_j][1] / 255.;
 			mag = sqrt(pow(vx, 2) + pow(vy, 2));
 			float rgb[3];
-			Rainbow_color(mag, rgb);*/
+			Rainbow_color(mag, rgb);
 			/*lic_tex_color[i][j][0] = (unsigned char)((lic_tex[i][j][0] * 0.8) * (rgb[0] * 0.8));
 			lic_tex_color[i][j][1] = (unsigned char)((lic_tex[i][j][1] * 0.8) * (rgb[1] * 0.8));
 			lic_tex_color[i][j][2] = (unsigned char)((lic_tex[i][j][2] * 0.8) * (rgb[2] * 0.8));*/
-			/*lic_tex_color[i][j][0] = (unsigned char)((1 + lic_tex[i][j][0]) * rgb[0]);
+			lic_tex_color[i][j][0] = (unsigned char)((1 + lic_tex[i][j][0]) * rgb[0]);
 			lic_tex_color[i][j][1] = (unsigned char)((1 + lic_tex[i][j][1]) * rgb[1]);
-			lic_tex_color[i][j][2] = (unsigned char)((1 + lic_tex[i][j][2]) * rgb[2]);*/
+			lic_tex_color[i][j][2] = (unsigned char)((1 + lic_tex[i][j][2]) * rgb[2]);
 		}
 	}
 }
@@ -2236,12 +2288,38 @@ void TW_CALL getArrowCB(void* value, void* clientData) {
 	*(int *)value = g_arrows;
 }
 
-void TW_CALL setColoredCB(const void* value, void* clientData) {
-	g_colorLIC = *(const int *)value;
+void TW_CALL setEnhancedCB(const void* value, void* clientData) {
+	g_enhanceLIC = *(const int *)value;
 }
 
-void TW_CALL getColoredCB(void* value, void* clientData) {
-	*(int *)value = g_colorLIC;
+void TW_CALL getEnhancedCB(void* value, void* clientData) {
+	*(int *)value = g_enhanceLIC;
+}
+
+void TW_CALL getColorLICCB(void* value, void* clientData) {
+	*(int *)value = g_coloredLIC;
+}
+
+void TW_CALL setColorLICCB(const void* value, void* clientData) {
+	g_coloredLIC = *(const int *)value;
+}
+
+void TW_CALL getColorCB(void* value, void* clientData) {
+	*(int *)value = g_colorPlot;
+}
+
+void TW_CALL setColorCB(const void* value, void* clientData) {
+	g_colorPlot = *(const int *)value;
+	/*if (g_colorPlot) {
+		glutDisplayFunc(DisplayOG);
+		glutReshapeFunc(Reshape);
+		Reshape(1024, 768);
+	}
+	else {
+		glutDisplayFunc(DisplayNew);
+		glutReshapeFunc(ReshapeNew);
+		ReshapeNew(1024, 768);
+	}*/
 }
 
 void renderVecImg() {
@@ -2346,7 +2424,7 @@ void TW_CALL loadNewObjCB(void *clientData)
 		calcLimits();
 		/*setColorFunction();
 		setExtremePointers();*/
-		setupTwBar();
+		//setupTwBar();
 		renderVecImg();
 		computeLIC();
 	}
@@ -2359,6 +2437,10 @@ void TW_CALL loadNewObjCB(void *clientData)
 	g_WhiteThreshold = 0.5; // reset g_WhiteThreshold
 	glutSetWindow(MainWindow);
 	glutPostRedisplay();
+}
+
+void updateLIC(void* clientData) {
+	computeLIC();
 }
 
 void InitTwBar()
@@ -2463,8 +2545,13 @@ void InitTwBar()
 	TwEnumVal VectorPlotEV[4] = { {0, "Magnitude"}, {1, "Angle"}, {2, "X-component"}, {3, "Y-component"} };
 	TwType PlotType = TwDefineEnum("VectorPlotType", VectorPlotEV, 4);
 	TwAddVarRW(bar, "VectorPlot", PlotType, &whichPlot, "label='Plot Type'");
+	//TwAddVarCB(bar, "colorLIC", TW_TYPE_BOOL32, setColorLICCB, getColorLICCB, NULL, "label='Toggle colored LIC'");
+	TwAddVarCB(bar, "colorPlot", TW_TYPE_BOOL32, setColorCB, getColorCB, NULL, "label='Toggle Color Plots'");
 	TwAddVarCB(bar, "toggleArrows", TW_TYPE_BOOL32, setArrowCB, getArrowCB, NULL, "label='Toggle Arrows'");
-	TwAddVarCB(bar, "toggleColoredLIC", TW_TYPE_BOOL32, setColoredCB, getColoredCB, NULL, "label='Toggle Colored LIC'");
+	TwAddVarCB(bar, "toggleEnhancedLIC", TW_TYPE_BOOL32, setEnhancedCB, getEnhancedCB, NULL, "label='Toggle Enhanced LIC'");
+	TwAddVarCB(bar, "toggleColoredLIC", TW_TYPE_BOOL32, setColorLICCB, getColorLICCB, NULL, "label='Toggle Colored LIC'");
+	TwAddVarRW(bar, "modifyStreamLength", TW_TYPE_INT32, &g_streamLength, "label='Change streamline length in pixels' min=2 max=256 step=1 help='NOTE: Large values will take longer to compute'");
+	TwAddButton(bar, "updateLIC", updateLIC, NULL, "label='Recompute LIC'");
 }
 
 // Main
@@ -2510,13 +2597,13 @@ int main(int argc, char *argv[])
 	FILE *this_file = fopen("./models/dipole.ply", "r");
 	poly = new Polyhedron(this_file);
 	fclose(this_file);
-	poly->initialize(); // initialize everything
 
-	calcLimits(); // calculate limits for the default figure
+	poly->initialize(); // initialize everything
 
 	poly->calc_bounding_sphere();
 	poly->calc_face_normals_and_area();
 	poly->average_normals();
+	calcLimits(); // calculate limits for the default figure
 	setColorFunction();
 	setExtremePointers();
 	gen_noise_tex();
