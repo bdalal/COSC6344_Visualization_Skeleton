@@ -268,13 +268,13 @@ unsigned char noise_tex[IMG_RES][IMG_RES][3];
 unsigned char vec_img[IMG_RES][IMG_RES][3];
 unsigned char lic_tex[IMG_RES][IMG_RES][3];
 unsigned char lic_tex_enhanced[IMG_RES][IMG_RES][3];
-unsigned char lic_tex_color[IMG_RES][IMG_RES][3];
 
 typedef struct streampoint {
 	int nextX, nextY;
 };
 
 std::vector<streampoint> streamline;
+std::vector<std::vector<streampoint>> streamlines;
 
 const int MINUS = { 0 };
 const int PLUS = { 1 };
@@ -1047,7 +1047,6 @@ void draw_arrows(double head[2], float direct[2])
 	glTranslatef(head[0], head[1], 0);
 	glRotatef(atan2(direct[1], direct[0]) * 360 / (2 * M_PI), 0, 0, 1);
 	// draw arrow head
-	//glScalef(0.03, 0.03, 1);
 	glScalef(0.03, 0.03, 1);
 	glBegin(GL_TRIANGLES);
 	glVertex2f(0, 0);
@@ -1758,8 +1757,6 @@ void DisplayNew(void) {
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, lic_tex);
 	else if (g_enhanceLIC)
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, lic_tex_enhanced);
-	//else if (g_colorPlot)
-		//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, lic_tex_color);
 	glBegin(GL_QUAD_STRIP);
 	glTexCoord2f(0.0, 0.0); glVertex2f(0.0, 0.0);
 	glTexCoord2f(0.0, 1.0); glVertex2f(0.0, 1.0);
@@ -2012,6 +2009,7 @@ void computeLIC() {
 	/*For each pixel
 		Compute a streamline using the vector field image in forward and backward direction (the streamline computation is terminated when the desired number of pixels is reached).
 		Accumulate the color values from the pixels obtained in the previous step*/
+	streamlines.clear();
 	for (int i = 0; i < IMG_RES; i++) {
 		for (int j = 0; j < IMG_RES; j++) {
 			int next_i, next_j;
@@ -2087,35 +2085,31 @@ void computeLIC() {
 			lic_tex[i][j][0] = (unsigned char)(totalNr / streamline.size());
 			lic_tex[i][j][1] = (unsigned char)(totalNg / streamline.size());
 			lic_tex[i][j][2] = (unsigned char)(totalNb / streamline.size());
-			// compute enhanced LIC
-			totalNr = totalNg = totalNb = 0.;
-			for (int k = 0; k < streamline.size(); k++) {
-				int xp = streamline[k].nextX;
-				int yp = streamline[k].nextY;
-				float r, g, b;
-				r = (float)lic_tex[xp][yp][0];
-				g = (float)lic_tex[xp][yp][1];
-				b = (float)lic_tex[xp][yp][2];
-				totalNr += r;
-				totalNg += g;
-				totalNb += b;
-			}
-			lic_tex_enhanced[i][j][0] = (unsigned char)(totalNr / streamline.size());
-			lic_tex_enhanced[i][j][1] = (unsigned char)(totalNg / streamline.size());
-			lic_tex_enhanced[i][j][2] = (unsigned char)(totalNb / streamline.size());
-			// compute the color map based on magnitude for pixel
-			vx = vx_min + (vx_max - vx_min) * vec_img[next_i][next_j][0] / 255.;
-			vy = vy_min + (vy_max - vy_min) * vec_img[next_i][next_j][1] / 255.;
-			mag = sqrt(pow(vx, 2) + pow(vy, 2));
-			float rgb[3];
-			Rainbow_color(mag, rgb);
-			/*lic_tex_color[i][j][0] = (unsigned char)((lic_tex[i][j][0] * 0.8) * (rgb[0] * 0.8));
-			lic_tex_color[i][j][1] = (unsigned char)((lic_tex[i][j][1] * 0.8) * (rgb[1] * 0.8));
-			lic_tex_color[i][j][2] = (unsigned char)((lic_tex[i][j][2] * 0.8) * (rgb[2] * 0.8));*/
-			lic_tex_color[i][j][0] = (unsigned char)((1 + lic_tex[i][j][0]) * rgb[0]);
-			lic_tex_color[i][j][1] = (unsigned char)((1 + lic_tex[i][j][1]) * rgb[1]);
-			lic_tex_color[i][j][2] = (unsigned char)((1 + lic_tex[i][j][2]) * rgb[2]);
+			streamlines.push_back(streamline);
 		}
+	}
+}
+
+void computeELIC() {
+	// compute enhanced LIC
+	for (int i = 0; i < streamlines.size(); i++) {
+		float totalNr, totalNg, totalNb;
+		totalNr = totalNg = totalNb = 0.;
+		std::vector<streampoint> stream = streamlines[i];
+		for (int k = 0; k < stream.size(); k++) {
+			int xp = stream[k].nextX;
+			int yp = stream[k].nextY;
+			float r, g, b;
+			r = (float)lic_tex[xp][yp][0];
+			g = (float)lic_tex[xp][yp][1];
+			b = (float)lic_tex[xp][yp][2];
+			totalNr += r;
+			totalNg += g;
+			totalNb += b;
+		}
+		lic_tex_enhanced[i / IMG_RES][i % IMG_RES][0] = (unsigned char)(totalNr / stream.size());
+		lic_tex_enhanced[i / IMG_RES][i % IMG_RES][1] = (unsigned char)(totalNg / stream.size());
+		lic_tex_enhanced[i / IMG_RES][i % IMG_RES][2] = (unsigned char)(totalNb / stream.size());
 	}
 }
 
@@ -2310,16 +2304,6 @@ void TW_CALL getColorCB(void* value, void* clientData) {
 
 void TW_CALL setColorCB(const void* value, void* clientData) {
 	g_colorPlot = *(const int *)value;
-	/*if (g_colorPlot) {
-		glutDisplayFunc(DisplayOG);
-		glutReshapeFunc(Reshape);
-		Reshape(1024, 768);
-	}
-	else {
-		glutDisplayFunc(DisplayNew);
-		glutReshapeFunc(ReshapeNew);
-		ReshapeNew(1024, 768);
-	}*/
 }
 
 void renderVecImg() {
@@ -2427,6 +2411,7 @@ void TW_CALL loadNewObjCB(void *clientData)
 		//setupTwBar();
 		renderVecImg();
 		computeLIC();
+		computeELIC();
 	}
 
 	//if (isPoly != 2) {
@@ -2441,6 +2426,7 @@ void TW_CALL loadNewObjCB(void *clientData)
 
 void updateLIC(void* clientData) {
 	computeLIC();
+	computeELIC();
 }
 
 void InitTwBar()
@@ -2609,6 +2595,7 @@ int main(int argc, char *argv[])
 	gen_noise_tex();
 	renderVecImg();
 	computeLIC();
+	computeELIC();
 	// nContours(nullptr);
 
 	// Build a display list for the axes
