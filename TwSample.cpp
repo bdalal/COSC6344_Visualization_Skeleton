@@ -1731,8 +1731,6 @@ void draw3dVis() {
 	}
 }
 
-// TODO: add vector color plot rendering to this display function
-// TODO: finish display function
 void DisplayNew(void) {
 	glViewport(0, 0, (GLsizei)IMG_RES, (GLsizei)IMG_RES);
 	glMatrixMode(GL_PROJECTION);
@@ -1998,12 +1996,6 @@ void TW_CALL nContours(void *ClientData) { // first draws one contour based on t
 		}
 	}
 }
-
-//TODO: interface to toggle between color plots and texture based imgs
-
-//TODO: check regarding arrows not being rendered correctly
-//TODO: check for higher order integration while computing the next points
-//TODO: variable kernel size and interface for the same
 
 void computeLIC() {
 	/*For each pixel
@@ -2434,7 +2426,7 @@ void InitTwBar()
 	// Create a tweak bar
 	bar = TwNewBar("TweakBar");
 	TwDefine(" GLOBAL help='This example shows how to integrate AntTweakBar with GLUT and OpenGL.' "); // Message added to the help bar.
-	TwDefine(" TweakBar size='200 700' color='0 128 255' alpha=128  "); // change default tweak bar size and color
+	TwDefine(" TweakBar size='200 700' color='0 128 255' alpha=128 position='600 0' "); // change default tweak bar size and color
 	TwDefine(" TweakBar  label='Visual Parameters'");        // change the title of the Tweakbar
 
 	// Add callback to toggle reference axes (callback functions are defined above).
