@@ -1775,7 +1775,14 @@ void DisplayNew(void) {
 				Vertex *v = t->verts[j];
 				glNormal3d(v->normal.entry[0], v->normal.entry[1], v->normal.entry[2]);
 				float rgb[3];
-				colorFunction(v->magnitude, rgb);
+				if (whichPlot == 0)
+					colorFunction(v->magnitude, rgb);
+				else if (whichPlot == 1)
+					colorFunction(v->angle, rgb);
+				else if (whichPlot == 2)
+					colorFunction(v->vx, rgb);
+				else if (whichPlot == 3)
+					colorFunction(v->vy, rgb);
 				glColor4f(rgb[0], rgb[1], rgb[2], 0.45);
 				glVertex3d(v->x, v->y, v->z);
 			}
@@ -2426,7 +2433,7 @@ void InitTwBar()
 	// Create a tweak bar
 	bar = TwNewBar("TweakBar");
 	TwDefine(" GLOBAL help='This example shows how to integrate AntTweakBar with GLUT and OpenGL.' "); // Message added to the help bar.
-	TwDefine(" TweakBar size='200 700' color='0 128 255' alpha=128 position='600 0' "); // change default tweak bar size and color
+	TwDefine(" TweakBar size='400 600' color='0 128 255' alpha=128 position='600 0' "); // change default tweak bar size and color
 	TwDefine(" TweakBar  label='Visual Parameters'");        // change the title of the Tweakbar
 
 	// Add callback to toggle reference axes (callback functions are defined above).
