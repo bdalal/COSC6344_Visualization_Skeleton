@@ -210,9 +210,6 @@ float g_probeX = 0.;
 float g_probeY = 0.;
 float g_probeZ = 0.;
 
-float g_euler_dt = 0.5;
-float g_rk_dt = 1;
-
 int whichIntegrator = 0;
 
 #include "Skeleton.h"
@@ -296,7 +293,7 @@ unsigned char lic_tex[IMG_RES][IMG_RES][3];
 unsigned char lic_tex_enhanced[IMG_RES][IMG_RES][3];
 
 typedef struct streampoint {
-	int nextX, nextY, nextZ;
+	int nextX, nextY;
 };
 
 std::vector<streampoint> streamline;
@@ -2190,6 +2187,7 @@ void Display(void)
 
 	//setColorFunction();
 	//setExtremePointers();
+
 	//// Draw the 3D object
 	//if (isPoly == 1) drawSquareObject();
 	//else if (isPoly == 0) drawTriangularObject();
@@ -2215,6 +2213,12 @@ void Display(void)
 		else
 			draw_3d_arrows_field3();
 	}
+
+	/*draw_3d_arrows_field1();
+
+	if (g_arrows)
+		draw_3d_arrows_field1();*/
+
 
 		// Draw axes
 	if (g_Axes)
@@ -2325,11 +2329,64 @@ void computeStreamlines() {
 	for (int i = 0; i < NX3d; i++) {
 		for (int j = 0; j < NY3d; j++) {
 			for (int k = 0; k < NZ3d; k++) {
-				int next_x, next_y, next_z;
+				int next_i, next_j, next_k;
 				float x, y, z, vx, vy, vz, mag;
 				bool conditions;
 				streamline.clear();
-				
+				// compute streamline in forward direction
+				x = j + 0.5;
+				y = i + 0.5;
+				z = k + 0.5;
+				next_i = i;
+				next_j = j;
+				next_k = k;
+				conditions = !(next_i < 0 || next_j < 0 || next_k < 0 || next_i >= NX3d || next_j >= NX3d || next_k >= NX3d);
+				for (int l = 0; l < g_streamLength / 2 && conditions; l++) {
+					vx = vx_min + ((vx_max - vx_min) * vec_img[next_i][next_j][0] / 255.);
+					vy = vy_min + ((vy_max - vy_min) * vec_img[next_i][next_j][1] / 255.);
+					mag = sqrt(pow(vx, 2) + pow(vy, 2));
+					if (mag < 0.000001)
+						break;
+					vx /= mag;
+					vy /= mag;
+					x += vx;
+					y += vy;
+					next_j = (int)x;
+					next_i = (int)y;
+					conditions = !(next_i < 0 || next_j < 0 || next_i >= IMG_RES || next_j >= IMG_RES);
+					if (!conditions)
+						break;
+					streampoint point;
+					point.nextX = next_i;
+					point.nextY = next_j;
+					streamline.push_back(point);
+				}
+				// compute streamlines in backward direction
+				x = j - 0.5;
+				y = i - 0.5;
+				next_i = i;
+				next_j = j;
+				conditions = !(next_i < 0 || next_j < 0 || next_i >= IMG_RES || next_j >= IMG_RES);
+				for (int l = 0; l < g_streamLength / 2 && conditions; l++) {
+					vx = vx_min + ((vx_max - vx_min) * vec_img[next_i][next_j][0] / 255.);
+					vy = vy_min + ((vy_max - vy_min) * vec_img[next_i][next_j][1] / 255.);
+					mag = sqrt(pow(vx, 2) + pow(vy, 2));
+					if (mag < 0.000001)
+						break;
+					vx /= mag;
+					vy /= mag;
+					x -= vx;
+					y -= vy;
+					next_j = (int)x;
+					next_i = (int)y;
+					conditions = !(next_i < 0 || next_j < 0 || next_i >= IMG_RES || next_j >= IMG_RES);
+					if (!conditions)
+						break;
+					streampoint point;
+					point.nextX = next_i;
+					point.nextY = next_j;
+					streamline.push_back(point);
+				}
 				streamlines.push_back(streamline);
 			}
 		}
@@ -2671,35 +2728,35 @@ void TW_CALL setColorCB(const void* value, void* clientData) {
 	g_colorPlot = *(const int *)value;
 }
 
-//void renderVecImg() {
-//	glViewport(0, 0, (GLsizei)IMG_RES, (GLsizei)IMG_RES);
-//	glMatrixMode(GL_PROJECTION);
-//	glLoadIdentity();
-//	gluOrtho2D(0, 1, 0, 1);
-//	glClear(GL_COLOR_BUFFER_BIT);
-//	glDrawBuffer(GL_BACK);
-//	int i, j;
-//	// render the mesh
-//	for (i = 0; i < poly->ntris; i++) {
-//		Triangle *temp_t = poly->tlist[i];
-//		float rgb[3];
-//		glBegin(GL_TRIANGLES);
-//		for (j = 0; j < 3; j++)
-//		{
-//			Vertex *v = temp_t->verts[j];
-//			//determine the color for this vertex based on its vector value
-//			rgb[0] = (v->vx - vx_min) / (vx_max - vx_min);
-//			rgb[1] = (v->vy - vy_min) / (vy_max - vy_min);
-//			rgb[2] = 0.;
-//			glColor3f(rgb[0], rgb[1], rgb[2]);
-//			glVertex2f(v->x, v->y);
-//		}
-//		glEnd();
-//	}
-//	// save the rendered image into the vec_img
-//	glReadBuffer(GL_BACK);
-//	glReadPixels(0, 0, IMG_RES, IMG_RES, GL_RGB, GL_UNSIGNED_BYTE, vec_img);
-//}
+void renderVecImg() {
+	glViewport(0, 0, (GLsizei)IMG_RES, (GLsizei)IMG_RES);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluOrtho2D(0, 1, 0, 1);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDrawBuffer(GL_BACK);
+	int i, j;
+	// render the mesh
+	for (i = 0; i < poly->ntris; i++) {
+		Triangle *temp_t = poly->tlist[i];
+		float rgb[3];
+		glBegin(GL_TRIANGLES);
+		for (j = 0; j < 3; j++)
+		{
+			Vertex *v = temp_t->verts[j];
+			//determine the color for this vertex based on its vector value
+			rgb[0] = (v->vx - vx_min) / (vx_max - vx_min);
+			rgb[1] = (v->vy - vy_min) / (vy_max - vy_min);
+			rgb[2] = 0.;
+			glColor3f(rgb[0], rgb[1], rgb[2]);
+			glVertex2f(v->x, v->y);
+		}
+		glEnd();
+	}
+	// save the rendered image into the vec_img
+	glReadBuffer(GL_BACK);
+	glReadPixels(0, 0, IMG_RES, IMG_RES, GL_RGB, GL_UNSIGNED_BYTE, vec_img);
+}
 
 void TW_CALL loadNewObjCB(void *clientData)
 {
@@ -2746,10 +2803,12 @@ void TW_CALL loadNewObjCB(void *clientData)
 			strcpy(object_name, "3dVis");*/
 	}
 
-	//if (isPoly == 0)
-		//poly->finalize();
+	/*if (isPoly == 0)
+		poly->finalize();*/
+
 		//Reset();
-		//char tmp_str[512];
+
+		/*char tmp_str[512];*/
 		//if (strstr(object_name, "dat")) {
 		//	// load dat file and put in same data structure
 		//	sprintf(tmp_str, "./models/%s", object_name);
@@ -2928,11 +2987,12 @@ void InitTwBar()
 	// Add the enum variable 'g_CurrentShape' to 'bar'
 	// (before adding an enum variable, its enum type must be declared to AntTweakBar as follow)
 	{
-		/*ShapeEV associates Shape enum values with labels that will be displayed instead of enum values
-		TwEnumVal shapeEV[NUM_SHAPES] = { { SHAPE_TEAPOT, "Teapot" },{ SHAPE_TORUS, "Torus" },{ SHAPE_CONE, "Cone" },{ BUNNY, "Bunny" } };
-		TwEnumVal shapeEV[NUM_SHAPES] = { { 0, "torus_field" },{ 1, "iceland_current_field" },{ 2, "diesel_field1" },{ 3, "distance_field1" },{ 4, "distance_field2" },
-		{ 5, "temperature1.dat" },{ 6, "temperature2.dat" }, {7, "3D Vis" } };
-		TwEnumVal shapeEV[NUM_SHAPES] = { {0, "Dipole"}, {1, "Bruno3"}, {2, "Cnoise"}, {3, "Bnoise"}, {4, "Vnoise"} };*/
+		// ShapeEV associates Shape enum values with labels that will be displayed instead of enum values
+		//TwEnumVal shapeEV[NUM_SHAPES] = { { SHAPE_TEAPOT, "Teapot" },{ SHAPE_TORUS, "Torus" },{ SHAPE_CONE, "Cone" },{ BUNNY, "Bunny" } };
+
+		/*TwEnumVal shapeEV[NUM_SHAPES] = { { 0, "torus_field" },{ 1, "iceland_current_field" },{ 2, "diesel_field1" },{ 3, "distance_field1" },{ 4, "distance_field2" },
+		{ 5, "temperature1.dat" },{ 6, "temperature2.dat" }, {7, "3D Vis" } };*/
+		/*TwEnumVal shapeEV[NUM_SHAPES] = { {0, "Dipole"}, {1, "Bruno3"}, {2, "Cnoise"}, {3, "Bnoise"}, {4, "Vnoise"} };*/
 
 		TwEnumVal shapeEV[NUM_SHAPES] = { {0, "Field 1"}, {1, "Field 2"}, {2, "Field 3"} };
 
@@ -2970,8 +3030,10 @@ void InitTwBar()
 	//def = definition.c_str();
 	//TwAddVarRW(bar, "controlSmax", TW_TYPE_DOUBLE, &s_max, def);
 	//TwAddButton(bar, "updateMinMax", updateDataRange, NULL, "label='Update Temp. min/max'");
+
 	////Add modifier for the no. of iso-contours computed and displayed
 	//TwAddVarRW(bar, "No. of Iso contours", TW_TYPE_UINT16, &g_ncontours, " label = 'Adjust no. of contours shown' min=1 max=256 step=1 help='Increase/decrease the no. of contours'");
+
 	////Add modifier for the iso-contour value
 	//float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value
 	//definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
@@ -3045,13 +3107,15 @@ int main(int argc, char *argv[])
 	max_ptr = &max_sv1;
 	min_ptr = &min_sv1;
 	currentField = 1;
+	/*setExtremePointers();*/
 
-	// setExtremePointers();
 	// Load the model and data here
 	//FILE *this_file = fopen("./models/dipole.ply", "r");
 	//poly = new Polyhedron(this_file);
 	//fclose(this_file);
+
 	//poly->initialize(); // initialize everything
+
 	//poly->calc_bounding_sphere();
 	//poly->calc_face_normals_and_area();
 	//poly->average_normals();
