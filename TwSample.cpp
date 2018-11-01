@@ -212,8 +212,9 @@ float g_probeX = 0.;
 float g_probeY = 0.;
 float g_probeZ = 0.;
 
-float g_euler_dt = 0.5;
-float g_rk_dt = 1;
+float g_step = 0.1;
+
+float g_linedist = 0.1;
 
 int whichIntegrator = 0;
 
@@ -289,7 +290,7 @@ unsigned char TextureXZ[NY3d][NZ3d][NX3d][4];
 unsigned char TextureYZ[NX3d][NZ3d][NY3d][4];
 
 //streamline length
-int g_streamLength = 20; // max 256 pixels in either direction
+int g_streamLength = 200;
 // texture images
 const int IMG_RES = 512; // resolution of the image
 unsigned char noise_tex[IMG_RES][IMG_RES][3];
@@ -298,7 +299,7 @@ unsigned char lic_tex[IMG_RES][IMG_RES][3];
 unsigned char lic_tex_enhanced[IMG_RES][IMG_RES][3];
 
 typedef struct streampoint {
-	int nextX, nextY, nextZ;
+	float nextX, nextY, nextZ;
 };
 
 std::vector<streampoint> streamline;
@@ -2138,6 +2139,19 @@ void setColorFunction() {
 //	glutPostRedisplay();
 //}
 
+
+void draw_streamlines() {
+	for (int i = 0; i < streamlines.size(); i++) {
+		std::vector<streampoint> streamline = streamlines[i];
+		glBegin(GL_LINE_STRIP);
+		for (int j = 0; j < streamline.size(); j++) {
+			streampoint *point = &streamline[j];
+			glVertex3f(point->nextX, point->nextY, point->nextZ);
+		}
+		glEnd();
+	}
+}
+
 // Callback function called by GLUT to render screen
 void Display(void)
 {
@@ -2216,6 +2230,10 @@ void Display(void)
 			draw_3d_arrows_field2();
 		else
 			draw_3d_arrows_field3();
+	}
+
+	if (g_streamlines) {
+		draw_streamlines();
 	}
 
 		// Draw axes
@@ -2334,8 +2352,14 @@ double getDistance(float x, float y, float z) {
 	return distance;
 }
 
+double getSeparation(float x, float y, float z) {
+	float separation = 1.;
+	// TODO
+	return separation;
+}
+
 bool checkConditions(float next_x, float next_y, float next_z, int n_steps) {
-	bool conditions, condition1, condition2, condition3, condition4;	
+	bool conditions, condition1, condition2, condition3, condition4, condition5;	
 	// next value should be within bounds
 	condition1 = (next_x >= -1. && next_x <= 1.) && (next_y >= -1. && next_y <= 1.) && (next_z >= -1. && next_z <= 1.);
 	// next value is not a fixed point
@@ -2344,48 +2368,63 @@ bool checkConditions(float next_x, float next_y, float next_z, int n_steps) {
 	condition3 = getDistance(next_x, next_y, next_z) > 0.001;
 	// streamline length in steps has been reached
 	condition4 = n_steps <= g_streamLength;
+	// streamline is too close to other streamlines
+	condition5 = getSeparation(next_x, next_y, next_z) > 0.001;
 	// check if all conditions are satisfied
-	conditions = condition1 && condition2 && condition3 && condition4;
+	conditions = condition1 && condition2 && condition3 && condition4 && condition5;
 	
 	return conditions;
 }
 
-// TODO: interface to change step size
-
-void computeStreamlines() {
-	streamlines.clear();
+void computeStreamline(float seedX, float seedY, float seedZ) {
 	int n_steps = 0;
 	float next_x, next_y, next_z;
-	next_x = g_probeX;
-	next_y = g_probeY;
-	next_z = g_probeZ;
+	next_x = seedX;
+	next_y = seedY;
+	next_z = seedZ;
 	float vx, vy, vz, magnitude;
 	streamline.clear();
+	streampoint point;
 	if (whichIntegrator == 0) {
 		// Euler
 		// Sn = Sn-1 + v(Sn-1).dt
-		// compute from g_probeX, g_probeY and g_probeZ
-		do {
-			n_steps++;
-			vectorFunction(next_x, next_y, next_z, vx, vy, vz, magnitude);
-			vx *= g_euler_dt;
-			vy *= g_euler_dt;
-			vz *= g_euler_dt;
-			next_x += vx;
-			next_y += vy;
-			next_z += vz;
-			streampoint point;
+		while(checkConditions(next_x, next_y, next_z, n_steps)) {
 			point.nextX = next_x;
 			point.nextY = next_y;
 			point.nextZ = next_z;
 			streamline.push_back(point);
-		} while (checkConditions(next_x, next_y, next_z, n_steps));
+			n_steps++;
+			vectorFunction(next_x, next_y, next_z, vx, vy, vz, magnitude);
+			vx /= magnitude;
+			vy /= magnitude;
+			vz /= magnitude;
+			vx *= g_step;
+			vy *= g_step;
+			vz *= g_step;
+			next_x += vx;
+			next_y += vy;
+			next_z += vz;
+		}
 	}
 	else {
 		// RK - 2
 		// TODO
 	}
 	streamlines.push_back(streamline);
+}
+
+void computeStreamBunch() {
+	streamlines.clear();
+	computeStreamline(g_probeX, g_probeY, g_probeZ); // the probe
+	computeStreamline(g_probeX + g_linedist, g_probeY, g_probeZ); // first streamline
+	float x_coord, y_coord, theta;
+	for (int i = 40; i <= 160; i += 40) {
+		theta = i * M_PI / 180;
+		x_coord = sqrt(pow(g_linedist, 2) / (1 + pow(tan(theta), 2))) * (i < 90 ? 1 : -1);
+		y_coord = x_coord * tan(theta);
+		computeStreamline(g_probeX + x_coord, g_probeY + y_coord, g_probeZ);
+		computeStreamline(g_probeX + x_coord, g_probeY - y_coord, g_probeZ);
+	}
 }
 
 
@@ -2807,6 +2846,7 @@ void TW_CALL loadNewObjCB(void *clientData)
 			strcpy(object_name, "3dVis");*/
 	}
 	setVecFieldPointer();
+	computeStreamBunch();
 
 	//if (isPoly == 0)
 		//poly->finalize();
@@ -2935,12 +2975,8 @@ void calcLimits3dVec() {
 //	computeELIC();
 //}
 
-void updateProbe(void* clientData) {
-	//TODO
-}
-
 void recompStreamline(void* clientData) {
-	//TODO
+	computeStreamBunch();
 }
 
 void InitTwBar()
@@ -3048,15 +3084,16 @@ void InitTwBar()
 	//TwAddVarCB(bar, "colorPlot", TW_TYPE_BOOL32, setColorCB, getColorCB, NULL, "label='Toggle Color Plots'");
 	TwAddVarCB(bar, "toggleArrows", TW_TYPE_BOOL32, setArrowCB, getArrowCB, NULL, "label='Toggle Arrows'");
 	TwAddVarCB(bar, "toggleStreamlines", TW_TYPE_BOOL32, setStreamlinesCB, getStreamlinesCB, NULL, "label='Toggle Streamlines'");
-	TwAddVarRW(bar, "modifyStreamLength", TW_TYPE_INT32, &g_streamLength, "label='Change streamline length' min=2 max=256 step=1 help='NOTE: Large values will take longer to compute'");
-	TwAddButton(bar, "recomputeStreamlines", recompStreamline, NULL, "label='Recompute Streamlines'");
+	TwAddVarRW(bar, "modifyStreamLength", TW_TYPE_INT32, &g_streamLength, "label='Change streamline length' min=2 max=500 step=1 help='NOTE: Large values will take longer to compute'");
 	TwAddVarRW(bar, "moveProbeX", TW_TYPE_FLOAT, &g_probeX, "label='Change X coordinate' min=-1.0 max=1.0 step=0.01");
 	TwAddVarRW(bar, "moveProbeY", TW_TYPE_FLOAT, &g_probeY, "label='Change Y coordinate' min=-1.0 max=1.0 step=0.01");
 	TwAddVarRW(bar, "moveProbeZ", TW_TYPE_FLOAT, &g_probeZ, "label='Change Z coordinate' min=-1.0 max=1.0 step=0.01");
-	TwAddButton(bar, "updateProbe", updateProbe, NULL, "label='Update the probe position'");
 	TwEnumVal Integrators[2] = { {0, "Euler"}, {1, "Runga-Kutta Second Order"} };
 	TwType Integrator = TwDefineEnum("Integrators", Integrators, 2);
 	TwAddVarRW(bar, "changeIntegrator", Integrator, &whichIntegrator, "label='Change integration method'");
+	TwAddVarRW(bar, "changeDt", TW_TYPE_FLOAT, &g_step, "label='Change step size' min=0.01 max=0.5 step=0.01");
+	TwAddVarRW(bar, "changeSepDist", TW_TYPE_FLOAT, &g_linedist, "label='Change dist. between lines' min=0.1 max=0.5 step=0.01");
+	TwAddButton(bar, "updateProbe", recompStreamline, NULL, "label='Update Streamline'");
 	//TwAddVarCB(bar, "toggleEnhancedLIC", TW_TYPE_BOOL32, setEnhancedCB, getEnhancedCB, NULL, "label='Toggle Enhanced LIC'");
 	//TwAddVarCB(bar, "toggleColoredLIC", TW_TYPE_BOOL32, setColorLICCB, getColorLICCB, NULL, "label='Toggle Colored LIC'");
 	//TwAddButton(bar, "updateLIC", updateLIC, NULL, "label='Recompute LIC'");
@@ -3108,6 +3145,7 @@ int main(int argc, char *argv[])
 	min_ptr = &min_sv1;
 	currentField = 1;
 	setVecFieldPointer();
+	computeStreamBunch();
 
 	// setExtremePointers();
 	// Load the model and data here
