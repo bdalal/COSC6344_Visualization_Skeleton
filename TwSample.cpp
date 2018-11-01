@@ -112,6 +112,8 @@ unsigned short isPoly = 0; // check if we're drawing quads or triangles or 3d
 
 void(*colorFunction)(float, float[]); // pointer to color function of choice
 
+void(*vectorFunction)(float, float, float, float&, float&, float&, float&); // pointer to vector field of choice
+
 // some sample color definitions:
 // this order must list order of the colors
 
@@ -2320,20 +2322,70 @@ void TW_CALL GetAxesCB(void *value, void *clientData)
 	*(int *)value = g_Axes; // copy g_AutoRotate to value
 }
 
+double getMagnitude(float x, float y, float z) {
+	float magnitude, vx, vy, vz;
+	vectorFunction(x, y, z, vx, vy, vz, magnitude);
+	return magnitude;
+}
+
+double getDistance(float x, float y, float z) {
+	float distance = 1.;
+	// TODO
+	return distance;
+}
+
+bool checkConditions(float next_x, float next_y, float next_z, int n_steps) {
+	bool conditions, condition1, condition2, condition3, condition4;	
+	// next value should be within bounds
+	condition1 = (next_x >= -1. && next_x <= 1.) && (next_y >= -1. && next_y <= 1.) && (next_z >= -1. && next_z <= 1.);
+	// next value is not a fixed point
+	condition2 = getMagnitude(next_x, next_y, next_z) > 0.000001;
+	// streamline isn't curving back on itself - check if the euclidean distance is greater than threshold
+	condition3 = getDistance(next_x, next_y, next_z) > 0.001;
+	// streamline length in steps has been reached
+	condition4 = n_steps <= g_streamLength;
+	// check if all conditions are satisfied
+	conditions = condition1 && condition2 && condition3 && condition4;
+	
+	return conditions;
+}
+
+// TODO: interface to change step size
+
 void computeStreamlines() {
 	streamlines.clear();
-	for (int i = 0; i < NX3d; i++) {
-		for (int j = 0; j < NY3d; j++) {
-			for (int k = 0; k < NZ3d; k++) {
-				int next_x, next_y, next_z;
-				float x, y, z, vx, vy, vz, mag;
-				bool conditions;
-				streamline.clear();
-				
-				streamlines.push_back(streamline);
-			}
-		}
+	int n_steps = 0;
+	float next_x, next_y, next_z;
+	next_x = g_probeX;
+	next_y = g_probeY;
+	next_z = g_probeZ;
+	float vx, vy, vz, magnitude;
+	streamline.clear();
+	if (whichIntegrator == 0) {
+		// Euler
+		// Sn = Sn-1 + v(Sn-1).dt
+		// compute from g_probeX, g_probeY and g_probeZ
+		do {
+			n_steps++;
+			vectorFunction(next_x, next_y, next_z, vx, vy, vz, magnitude);
+			vx *= g_euler_dt;
+			vy *= g_euler_dt;
+			vz *= g_euler_dt;
+			next_x += vx;
+			next_y += vy;
+			next_z += vz;
+			streampoint point;
+			point.nextX = next_x;
+			point.nextY = next_y;
+			point.nextZ = next_z;
+			streamline.push_back(point);
+		} while (checkConditions(next_x, next_y, next_z, n_steps));
 	}
+	else {
+		// RK - 2
+		// TODO
+	}
+	streamlines.push_back(streamline);
 }
 
 
@@ -2701,6 +2753,15 @@ void TW_CALL setColorCB(const void* value, void* clientData) {
 //	glReadPixels(0, 0, IMG_RES, IMG_RES, GL_RGB, GL_UNSIGNED_BYTE, vec_img);
 //}
 
+void setVecFieldPointer() {
+	if (currentField == 1)
+		vectorFunction = &get_vector_field_1;
+	else if (currentField == 2)
+		vectorFunction = &get_vector_field_2;
+	else if (currentField == 3)
+		vectorFunction = &get_vector_field_3;
+}
+
 void TW_CALL loadNewObjCB(void *clientData)
 {
 	/*char object_name[128] = "Field 1";*/
@@ -2745,6 +2806,7 @@ void TW_CALL loadNewObjCB(void *clientData)
 		case 7:
 			strcpy(object_name, "3dVis");*/
 	}
+	setVecFieldPointer();
 
 	//if (isPoly == 0)
 		//poly->finalize();
@@ -2986,7 +3048,7 @@ void InitTwBar()
 	//TwAddVarCB(bar, "colorPlot", TW_TYPE_BOOL32, setColorCB, getColorCB, NULL, "label='Toggle Color Plots'");
 	TwAddVarCB(bar, "toggleArrows", TW_TYPE_BOOL32, setArrowCB, getArrowCB, NULL, "label='Toggle Arrows'");
 	TwAddVarCB(bar, "toggleStreamlines", TW_TYPE_BOOL32, setStreamlinesCB, getStreamlinesCB, NULL, "label='Toggle Streamlines'");
-	TwAddVarRW(bar, "modifyStreamLength", TW_TYPE_INT32, &g_streamLength, "label='Change streamline length in pixels' min=2 max=256 step=1 help='NOTE: Large values will take longer to compute'");
+	TwAddVarRW(bar, "modifyStreamLength", TW_TYPE_INT32, &g_streamLength, "label='Change streamline length' min=2 max=256 step=1 help='NOTE: Large values will take longer to compute'");
 	TwAddButton(bar, "recomputeStreamlines", recompStreamline, NULL, "label='Recompute Streamlines'");
 	TwAddVarRW(bar, "moveProbeX", TW_TYPE_FLOAT, &g_probeX, "label='Change X coordinate' min=-1.0 max=1.0 step=0.01");
 	TwAddVarRW(bar, "moveProbeY", TW_TYPE_FLOAT, &g_probeY, "label='Change Y coordinate' min=-1.0 max=1.0 step=0.01");
@@ -3045,6 +3107,7 @@ int main(int argc, char *argv[])
 	max_ptr = &max_sv1;
 	min_ptr = &min_sv1;
 	currentField = 1;
+	setVecFieldPointer();
 
 	// setExtremePointers();
 	// Load the model and data here
