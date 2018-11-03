@@ -208,13 +208,17 @@ int g_arrows = 0; // Toggle Arrow heads
 
 int g_streamlines = 0; // Toggle streamlines
 
+int g_streamribbon = 0; // Toggle streamribbon
+
 float g_probeX = 0.;
 float g_probeY = 0.;
 float g_probeZ = 0.;
 
-float g_step = 0.1;
+float g_step = 0.1; //  step size when integrating
 
-float g_linedist = 0.1;
+float g_linedist = 0.1; // line dist for computing stream bunch
+
+float g_rdist = 0.1; // width of streamribbon
 
 int whichIntegrator = 0;
 
@@ -303,6 +307,8 @@ typedef struct streampoint {
 };
 
 std::vector<streampoint> streamline;
+std::vector<streampoint> streamr1;
+std::vector<streampoint> streamr2;
 std::vector<std::vector<streampoint>> streamlines;
 
 const int MINUS = { 0 };
@@ -497,7 +503,7 @@ void get_vector_field_2(float x, float y, float z, float &vx, float &vy, float &
 void get_vector_field_3(float x, float y, float z, float &vx, float &vy, float &vz, float &magnitude) {
 	vx = -1. * y;
 	vy = -1. * z;
-	vz = 1.;
+	vz = x;
 	magnitude = sqrt(pow(vx, 2) + pow(vy, 2) + pow(vz, 2));
 }
 
@@ -1371,6 +1377,7 @@ void draw_3d_arrows_field1() {
 		for (int j = 0; j < NY3d; j++) {
 			for (int k = 0; k < NZ3d; k++) {
 				vecNode *node = &vec_field1[i][j][k];
+				// TODO normalize vectors before passing to the Arrow function
 				float arrow_head[3] = { node->x, node->y, node->z };
 				float arrow_direct[3] = { node->vx, node->vy, node->vz };
 				// draw_3d_arrows(arrow_head, arrow_direct, node->magnitude);
@@ -2141,13 +2148,30 @@ void setColorFunction() {
 
 
 void draw_streamlines() {
-	for (int i = 0; i < streamlines.size(); i++) {
+	for (int i = 0; i < (int) streamlines.size(); i++) {
 		std::vector<streampoint> streamline = streamlines[i];
 		glBegin(GL_LINE_STRIP);
 		for (int j = 0; j < streamline.size(); j++) {
 			streampoint *point = &streamline[j];
 			glVertex3f(point->nextX, point->nextY, point->nextZ);
 		}
+		glEnd();
+	}
+}
+
+// TODO: color streamline
+
+void draw_streamribbon() {
+	for (int i = 0; i < (int) streamr1.size() - 1; i++) {
+		glBegin(GL_QUADS);
+		streampoint *p1 = &streamr1[i];
+		streampoint *p2 = &streamr2[i];
+		glVertex3f(p1->nextX, p1->nextY, p1->nextZ);
+		glVertex3f(p2->nextX, p2->nextY, p2->nextZ);
+		++p1;
+		++p2;
+		glVertex3f(p2->nextX, p2->nextY, p2->nextZ);
+		glVertex3f(p1->nextX, p1->nextY, p1->nextZ);
 		glEnd();
 	}
 }
@@ -2232,9 +2256,11 @@ void Display(void)
 			draw_3d_arrows_field3();
 	}
 
-	if (g_streamlines) {
+	if (g_streamlines)
 		draw_streamlines();
-	}
+
+	if (g_streamribbon)
+		draw_streamribbon();
 
 		// Draw axes
 	if (g_Axes)
@@ -2349,6 +2375,9 @@ double getMagnitude(float x, float y, float z) {
 double getDistance(float x, float y, float z) {
 	float distance = 1.;
 	// TODO
+	for (int i = 0; i < (int)streamline.size(); i++) {
+
+	}
 	return distance;
 }
 
@@ -2376,7 +2405,7 @@ bool checkConditions(float next_x, float next_y, float next_z, int n_steps) {
 	return conditions;
 }
 
-void computeStreamline(float seedX, float seedY, float seedZ) {
+bool computeStreamline(float seedX, float seedY, float seedZ) {
 	int n_steps = 0;
 	float next_x, next_y, next_z;
 	next_x = seedX;
@@ -2388,7 +2417,7 @@ void computeStreamline(float seedX, float seedY, float seedZ) {
 	if (whichIntegrator == 0) {
 		// Euler
 		// Sn = Sn-1 + v(Sn-1).dt
-		while(checkConditions(next_x, next_y, next_z, n_steps)) {
+		while (checkConditions(next_x, next_y, next_z, n_steps)) {
 			point.nextX = next_x;
 			point.nextY = next_y;
 			point.nextZ = next_z;
@@ -2408,14 +2437,48 @@ void computeStreamline(float seedX, float seedY, float seedZ) {
 	}
 	else {
 		// RK - 2
-		// TODO
+		float vx2, vy2, vz2, vxavg, vyavg, vzavg;
+		while (checkConditions(next_x, next_y, next_z, n_steps)) {
+			point.nextX = next_x;
+			point.nextY = next_y;
+			point.nextZ = next_z;
+			streamline.push_back(point);
+			n_steps++;
+			vectorFunction(next_x, next_y, next_z, vx, vy, vz, magnitude);
+			vx /= magnitude;
+			vy /= magnitude;
+			vz /= magnitude;
+			vx *= g_step;
+			vy *= g_step;
+			vz *= g_step;
+			next_x += vx;
+			next_y += vy;
+			next_z += vz;
+			vectorFunction(next_x, next_y, next_z, vx2, vy2, vz2, magnitude);
+			vx2 /= magnitude;
+			vy2 /= magnitude;
+			vz2 /= magnitude;
+			vx2 *= g_step;
+			vy2 *= g_step;
+			vz2 *= g_step;
+			vxavg = (vx + vx2) / 2;
+			vyavg = (vy + vy2) / 2;
+			vzavg = (vz + vz2) / 2;
+			next_x += vxavg - vx;
+			next_y += vyavg - vy;
+			next_z += vzavg - vz;
+		}
 	}
+	if (n_steps == 0)
+		return false;
 	streamlines.push_back(streamline);
+	return true;
 }
 
 void computeStreamBunch() {
 	streamlines.clear();
-	computeStreamline(g_probeX, g_probeY, g_probeZ); // the probe
+	if (!computeStreamline(g_probeX, g_probeY, g_probeZ)) // the probe - to check if the probe point is fixed
+		return;
 	computeStreamline(g_probeX + g_linedist, g_probeY, g_probeZ); // first streamline
 	float x_coord, y_coord, theta;
 	for (int i = 40; i <= 160; i += 40) {
@@ -2424,6 +2487,130 @@ void computeStreamBunch() {
 		y_coord = x_coord * tan(theta);
 		computeStreamline(g_probeX + x_coord, g_probeY + y_coord, g_probeZ);
 		computeStreamline(g_probeX + x_coord, g_probeY - y_coord, g_probeZ);
+	}
+}
+
+double edist(float x1, float x2, float y1, float y2, float z1, float z2) {
+	return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2) + pow(z2 - z1, 2));
+}
+
+void computeStreamribbon() {
+	int n_steps = 0;
+	float next_x1, next_y1, next_z1, next_x2, next_y2, next_z2;
+	next_x1 = g_probeX;
+	next_y1 = g_probeY;
+	next_z1 = g_probeZ;
+	next_x2 = g_probeX + g_rdist;
+	next_y2 = g_probeY;
+	next_z2 = g_probeZ;
+	float vx, vy, vz, magnitude;
+	streamr1.clear();
+	streamr2.clear();
+	streampoint point1;
+	streampoint point2;
+	if (whichIntegrator == 0) {
+		// Euler
+		// Sn = Sn-1 + v(Sn-1).dt
+		while (checkConditions(next_x1, next_y1, next_z1, n_steps) && checkConditions(next_x2, next_y2, next_z2, n_steps)) {
+			point1.nextX = next_x1;
+			point1.nextY = next_y1;
+			point1.nextZ = next_z1;
+			streamr1.push_back(point1);
+			point2.nextX = next_x2;
+			point2.nextY = next_y2;
+			point2.nextZ = next_z2;
+			streamr2.push_back(point2);
+			n_steps++;
+			vectorFunction(next_x1, next_y1, next_z1, vx, vy, vz, magnitude);
+			vx /= magnitude;
+			vy /= magnitude;
+			vz /= magnitude;
+			vx *= g_step;
+			vy *= g_step;
+			vz *= g_step;
+			next_x1 += vx;
+			next_y1 += vy;
+			next_z1 += vz;
+			vectorFunction(next_x2, next_y2, next_z2, vx, vy, vz, magnitude);
+			vx /= magnitude;
+			vy /= magnitude;
+			vz /= magnitude;
+			vx *= g_step;
+			vy *= g_step;
+			vz *= g_step;
+			next_x2 += vx;
+			next_y2 += vy;
+			next_z2 += vz;
+			float dist = edist(next_x1, next_x2, next_y1, next_y2, next_z1, next_z2);
+			next_x2 = next_x1 + ((g_rdist * (next_x2 - next_x1)) / dist);
+			next_y2 = next_y1 + ((g_rdist * (next_y2 - next_y1)) / dist);
+			next_z2 = next_z1 + ((g_rdist * (next_z2 - next_z1)) / dist);
+		}
+	}
+	else {
+		// RK - 2 
+		float vx21, vy21, vz21, vx22, vy22, vz22, vxavg, vyavg, vzavg;
+		while (checkConditions(next_x1, next_y1, next_z1, n_steps) && checkConditions(next_x2, next_y2, next_z2, n_steps)) {
+			point1.nextX = next_x1;
+			point1.nextY = next_y1;
+			point1.nextZ = next_z1;
+			streamr1.push_back(point1);
+			point2.nextX = next_x2;
+			point2.nextY = next_y2;
+			point2.nextZ = next_z2;
+			streamr2.push_back(point2);
+			n_steps++;
+			vectorFunction(next_x1, next_y1, next_z1, vx, vy, vz, magnitude);
+			vx /= magnitude;
+			vy /= magnitude;
+			vz /= magnitude;
+			vx *= g_step;
+			vy *= g_step;
+			vz *= g_step;
+			next_x1 += vx;
+			next_y1 += vy;
+			next_z1 += vz;
+			vectorFunction(next_x1, next_y1, next_z1, vx21, vy21, vz21, magnitude);
+			vx21 /= magnitude;
+			vy21 /= magnitude;
+			vz21 /= magnitude;
+			vx21 *= g_step;
+			vy21 *= g_step;
+			vz21 *= g_step;
+			vxavg = (vx + vx21) / 2;
+			vyavg = (vy + vy21) / 2;
+			vzavg = (vz + vz21) / 2;
+			next_x1 += vxavg - vx;
+			next_y1 += vyavg - vy;
+			next_z1 += vzavg - vz;
+			vectorFunction(next_x2, next_y2, next_z2, vx, vy, vz, magnitude);
+			vx /= magnitude;
+			vy /= magnitude;
+			vz /= magnitude;
+			vx *= g_step;
+			vy *= g_step;
+			vz *= g_step;
+			next_x2 += vx;
+			next_y2 += vy;
+			next_z2 += vz;
+			vectorFunction(next_x2, next_y2, next_z2, vx22, vy22, vz22, magnitude);
+			vx22 /= magnitude;
+			vy22 /= magnitude;
+			vz22 /= magnitude;
+			vx22 *= g_step;
+			vy22 *= g_step;
+			vz22 *= g_step;
+			vxavg = (vx + vx22) / 2;
+			vyavg = (vy + vy22) / 2;
+			vzavg = (vz + vz22) / 2;
+			next_x2 += vxavg - vx;
+			next_y2 += vyavg - vy;
+			next_z2 += vzavg - vz;
+			float dist = edist(next_x1, next_x2, next_y1, next_y2, next_z1, next_z2);
+			next_x2 = next_x1 + ((g_rdist * (next_x2 - next_x1)) / dist);
+			next_y2 = next_y1 + ((g_rdist * (next_y2 - next_y1)) / dist);
+			next_z2 = next_z1 + ((g_rdist * (next_z2 - next_z1)) / dist);
+		}
 	}
 }
 
@@ -2732,10 +2919,20 @@ void TW_CALL getArrowCB(void* value, void* clientData) {
 
 void TW_CALL setStreamlinesCB(const void* value, void* clientData) {
 	g_streamlines = *(const int *)value;
+	g_streamribbon = 0;
 }
 
 void TW_CALL getStreamlinesCB(void* value, void* clientData) {
 	*(int *)value = g_streamlines;
+}
+
+void TW_CALL setStreamribbonCB(const void* value, void* clientData) {
+	g_streamribbon = *(const int *)value;
+	g_streamlines = 0;
+}
+
+void TW_CALL getStreamribbonCB(void* value, void* clientData) {
+	*(int *)value = g_streamribbon;
 }
 
 void TW_CALL setEnhancedCB(const void* value, void* clientData) {
@@ -2847,6 +3044,7 @@ void TW_CALL loadNewObjCB(void *clientData)
 	}
 	setVecFieldPointer();
 	computeStreamBunch();
+	computeStreamribbon();
 
 	//if (isPoly == 0)
 		//poly->finalize();
@@ -2977,6 +3175,7 @@ void calcLimits3dVec() {
 
 void recompStreamline(void* clientData) {
 	computeStreamBunch();
+	computeStreamribbon();
 }
 
 void InitTwBar()
@@ -2984,7 +3183,7 @@ void InitTwBar()
 	// Create a tweak bar
 	bar = TwNewBar("TweakBar");
 	TwDefine(" GLOBAL help='This example shows how to integrate AntTweakBar with GLUT and OpenGL.' "); // Message added to the help bar.
-	TwDefine(" TweakBar size='200 600' color='0 128 255' alpha=128 position='100 0' "); // change default tweak bar size and color
+	TwDefine(" TweakBar size='290 650' color='0 128 255' alpha=128 position='0 0' "); // change default tweak bar size and color
 	TwDefine(" TweakBar  label='Visual Parameters'");        // change the title of the Tweakbar
 
 	// Add callback to toggle reference axes (callback functions are defined above).
@@ -3084,6 +3283,7 @@ void InitTwBar()
 	//TwAddVarCB(bar, "colorPlot", TW_TYPE_BOOL32, setColorCB, getColorCB, NULL, "label='Toggle Color Plots'");
 	TwAddVarCB(bar, "toggleArrows", TW_TYPE_BOOL32, setArrowCB, getArrowCB, NULL, "label='Toggle Arrows'");
 	TwAddVarCB(bar, "toggleStreamlines", TW_TYPE_BOOL32, setStreamlinesCB, getStreamlinesCB, NULL, "label='Toggle Streamlines'");
+	TwAddVarCB(bar, "toggleStreamribbon", TW_TYPE_BOOL32, setStreamribbonCB, getStreamribbonCB, NULL, "label='Toggle Streamribbon'");
 	TwAddVarRW(bar, "modifyStreamLength", TW_TYPE_INT32, &g_streamLength, "label='Change streamline length' min=2 max=500 step=1 help='NOTE: Large values will take longer to compute'");
 	TwAddVarRW(bar, "moveProbeX", TW_TYPE_FLOAT, &g_probeX, "label='Change X coordinate' min=-1.0 max=1.0 step=0.01");
 	TwAddVarRW(bar, "moveProbeY", TW_TYPE_FLOAT, &g_probeY, "label='Change Y coordinate' min=-1.0 max=1.0 step=0.01");
@@ -3093,7 +3293,7 @@ void InitTwBar()
 	TwAddVarRW(bar, "changeIntegrator", Integrator, &whichIntegrator, "label='Change integration method'");
 	TwAddVarRW(bar, "changeDt", TW_TYPE_FLOAT, &g_step, "label='Change step size' min=0.01 max=0.5 step=0.01");
 	TwAddVarRW(bar, "changeSepDist", TW_TYPE_FLOAT, &g_linedist, "label='Change dist. between lines' min=0.1 max=0.5 step=0.01");
-	TwAddButton(bar, "updateProbe", recompStreamline, NULL, "label='Update Streamline'");
+	TwAddButton(bar, "updateProbe", recompStreamline, NULL, "label='Update Streamline/Streamribbon'");
 	//TwAddVarCB(bar, "toggleEnhancedLIC", TW_TYPE_BOOL32, setEnhancedCB, getEnhancedCB, NULL, "label='Toggle Enhanced LIC'");
 	//TwAddVarCB(bar, "toggleColoredLIC", TW_TYPE_BOOL32, setColorLICCB, getColorLICCB, NULL, "label='Toggle Colored LIC'");
 	//TwAddButton(bar, "updateLIC", updateLIC, NULL, "label='Recompute LIC'");
@@ -3146,6 +3346,7 @@ int main(int argc, char *argv[])
 	currentField = 1;
 	setVecFieldPointer();
 	computeStreamBunch();
+	computeStreamribbon();
 
 	// setExtremePointers();
 	// Load the model and data here
