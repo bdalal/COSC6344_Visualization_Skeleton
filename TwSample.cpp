@@ -2390,7 +2390,7 @@ double getDistance(float x, float y, float z) {
 
 // TODO include note in report about the benefit of RK2 but visualizing the stream ribbon for step size = 0.5 and obesrving the error for euler vs rk2
 // TODO include note in report about the origin being a fixed point for field 3 which is why the vector field won't show
-// TODO include note in report about streamlines in bunch being cut off because of the separation condition  - Lec10.pdf slide 48 condition 1
+// TODO include note in report about streamlines in bunch being cut off because of the separation condition  - Lec10.pdf slide 48 condition 1 - in fact, describe all conditions
 
 double getSeparation(float x, float y, float z) {
 	float separation = 1.;
@@ -2408,7 +2408,7 @@ double getSeparation(float x, float y, float z) {
 	return separation;
 }
 
-bool checkConditions(float next_x, float next_y, float next_z, int n_steps) {
+bool checkConditions(float next_x, float next_y, float next_z, int n_steps, bool computeRibbon) {
 	bool conditions, condition1, condition2, condition3, condition4, condition5;	
 	// next value should be within bounds
 	condition1 = (next_x >= -1. && next_x <= 1.) && (next_y >= -1. && next_y <= 1.) && (next_z >= -1. && next_z <= 1.);
@@ -2418,8 +2418,8 @@ bool checkConditions(float next_x, float next_y, float next_z, int n_steps) {
 	condition3 = getDistance(next_x, next_y, next_z) > 0.001;
 	// streamline length in steps has been reached
 	condition4 = n_steps <= g_streamLength;
-	// streamline is too close to other streamlines
-	condition5 = getSeparation(next_x, next_y, next_z) > 0.05;
+	// streamline is too close to other streamlines - don't need to check this for streamribbons
+	condition5 = getSeparation(next_x, next_y, next_z) > 0.05 || computeRibbon;
 	// check if all conditions are satisfied
 	conditions = condition1 && condition2 && condition3 && condition4 && condition5;
 	
@@ -2438,7 +2438,7 @@ bool computeStreamline(float seedX, float seedY, float seedZ) {
 	if (whichIntegrator == 0) {
 		// Euler
 		// Sn = Sn-1 + v(Sn-1).dt
-		while (checkConditions(next_x, next_y, next_z, n_steps)) {
+		while (checkConditions(next_x, next_y, next_z, n_steps, false)) {
 			point.nextX = next_x;
 			point.nextY = next_y;
 			point.nextZ = next_z;
@@ -2459,7 +2459,7 @@ bool computeStreamline(float seedX, float seedY, float seedZ) {
 	else {
 		// RK - 2
 		float vx2, vy2, vz2, vxavg, vyavg, vzavg;
-		while (checkConditions(next_x, next_y, next_z, n_steps)) {
+		while (checkConditions(next_x, next_y, next_z, n_steps, false)) {
 			point.nextX = next_x;
 			point.nextY = next_y;
 			point.nextZ = next_z;
@@ -2528,7 +2528,7 @@ void computeStreamribbon() {
 	if (whichIntegrator == 0) {
 		// Euler
 		// Sn = Sn-1 + v(Sn-1).dt
-		while (checkConditions(next_x1, next_y1, next_z1, n_steps) && checkConditions(next_x2, next_y2, next_z2, n_steps)) {
+		while (checkConditions(next_x1, next_y1, next_z1, n_steps, true) && checkConditions(next_x2, next_y2, next_z2, n_steps, true)) {
 			point1.nextX = next_x1;
 			point1.nextY = next_y1;
 			point1.nextZ = next_z1;
@@ -2567,7 +2567,7 @@ void computeStreamribbon() {
 	else {
 		// RK - 2 
 		float vx21, vy21, vz21, vx22, vy22, vz22, vxavg, vyavg, vzavg;
-		while (checkConditions(next_x1, next_y1, next_z1, n_steps) && checkConditions(next_x2, next_y2, next_z2, n_steps)) {
+		while (checkConditions(next_x1, next_y1, next_z1, n_steps, true) && checkConditions(next_x2, next_y2, next_z2, n_steps, true)) {
 			point1.nextX = next_x1;
 			point1.nextY = next_y1;
 			point1.nextZ = next_z1;
