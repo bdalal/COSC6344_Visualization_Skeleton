@@ -2372,18 +2372,39 @@ double getMagnitude(float x, float y, float z) {
 	return magnitude;
 }
 
+double edist(float x1, float x2, float y1, float y2, float z1, float z2) {
+	return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2) + pow(z2 - z1, 2));
+}
+
 double getDistance(float x, float y, float z) {
 	float distance = 1.;
-	// TODO
+	// return shortest distance of this point from any all points in the streamline
 	for (int i = 0; i < (int)streamline.size(); i++) {
-
+		streampoint *p = &streamline[i];
+		float temp = edist(x, p->nextX, y, p->nextY, z, p->nextZ);
+		if (temp < distance)
+			distance = temp;
 	}
 	return distance;
 }
 
+// TODO include note in report about the benefit of RK2 but visualizing the stream ribbon for step size = 0.5 and obesrving the error for euler vs rk2
+// TODO include note in report about the origin being a fixed point for field 3 which is why the vector field won't show
+// TODO include note in report about streamlines in bunch being cut off because of the separation condition  - Lec10.pdf slide 48 condition 1
+
 double getSeparation(float x, float y, float z) {
 	float separation = 1.;
-	// TODO
+	// return the shortest distance of this point on this streamline from the distance on all other streamlines
+	// we don't care which streamline it's closest to, we just want to terminate computation if it is too close to any of the other
+	for (int i = 0; i < (int)streamlines.size(); i++) {
+		std::vector<streampoint> stream = streamlines[i];
+		for (int j = 0; j < (int)stream.size(); j++) {
+			streampoint *p = &stream[j];
+			float temp = edist(x, p->nextX, y, p->nextY, z, p->nextZ);
+			if (temp < separation)
+				separation = temp;
+		}
+	}
 	return separation;
 }
 
@@ -2398,7 +2419,7 @@ bool checkConditions(float next_x, float next_y, float next_z, int n_steps) {
 	// streamline length in steps has been reached
 	condition4 = n_steps <= g_streamLength;
 	// streamline is too close to other streamlines
-	condition5 = getSeparation(next_x, next_y, next_z) > 0.001;
+	condition5 = getSeparation(next_x, next_y, next_z) > 0.05;
 	// check if all conditions are satisfied
 	conditions = condition1 && condition2 && condition3 && condition4 && condition5;
 	
@@ -2488,10 +2509,6 @@ void computeStreamBunch() {
 		computeStreamline(g_probeX + x_coord, g_probeY + y_coord, g_probeZ);
 		computeStreamline(g_probeX + x_coord, g_probeY - y_coord, g_probeZ);
 	}
-}
-
-double edist(float x1, float x2, float y1, float y2, float z1, float z2) {
-	return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2) + pow(z2 - z1, 2));
 }
 
 void computeStreamribbon() {
