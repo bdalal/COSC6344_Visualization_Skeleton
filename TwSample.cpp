@@ -56,12 +56,6 @@ int g_CurrentShape = 0;
 // Shapes scale
 float g_Zoom = 1.0f;
 // Shape orientation (stored as a quaternion)
-// First 3 params are x, y and z - the rotation axes
-// The 4th param is w - the rotation angle in radians
-// For glRotate, the rotation angle will be the first param and the axes in order will be the rest
-// Yrot is when y = 1 and x = z = 0
-// Xrot is when x = 1 and y = z = 0
-// Xrot is when x = 1 and y = z = 0
 float g_Rotation[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 // Auto rotate
 int g_AutoRotate = 0;
@@ -78,37 +72,13 @@ float max_sv1, max_sv2, max_sv3, min_sv1, min_sv2, min_sv3;
 float max_vx1, max_vx2, max_vx3, min_vx1, min_vx2, min_vx3;
 float max_vy1, max_vy2, max_vy3, min_vy1, min_vy2, min_vy3;
 float max_vz1, max_vz2, max_vz3, min_vz1, min_vz2, min_vz3;
-double abs_s_min, abs_s_max;
+float abs_s_min = 0., abs_s_max = 0.;
 // pointers to max and min values in any dataset
 float *max_ptr, *min_ptr;
 // White threshold
 float g_WhiteThreshold = 0.5;
-//iso scalar value
-float g_sprime = 50;
-//iso contour count
-int g_ncontours = 1;
-// iso surface flag
-bool g_isoSurfaces = false;
-// bilinear flag
-bool g_bilinear = false;
-// opacity value
-float g_opacity = 1.0;
-// enable/disable slices
-bool g_enableSlices = false;
-// enable/disable DVR
-bool g_enableDVR = true;
-// enable/disable original display function
-bool g_DisplayOG = false;
-// enable/disable enhanced LIC
-bool g_enhanceLIC = false;
-// enable/disable colorplot
-bool g_colorPlot = false;
-// enable/disable colored LIC
-bool g_coloredLIC = false;
 
 TwBar *bar = NULL; // Pointer to the tweak bar
-
-unsigned short isPoly = 0; // check if we're drawing quads or triangles or 3d
 
 void(*colorFunction)(float, float[]); // pointer to color function of choice
 
@@ -196,111 +166,35 @@ GLuint	AxesList = 101;		// list to hold the axes
 int g_Axes = 1;   // Toggle Axes
 int g_Box = 0;    // Toggle Box
 
-int g_XYplane = 1; // Toggle XY cutting plane
-int g_YZplane = 1; // Toggle YZ cutting plane
-int g_XZplane = 1; // Toggle XZ cutting plane
-
-float g_gradientMin = 0.; // Value of change in the 3dVis
-float g_gradientMax = 0.; // Value of change in the 3dVis
-float g_gradientAbsMax = 0; // Set maximum value for gradient for use in interface
-
 int g_arrows = 0; // Toggle Arrow heads
-
 int g_streamlines = 0; // Toggle streamlines
-
 int g_streamribbon = 0; // Toggle streamribbon
-
-float g_probeX = 0.;
-float g_probeY = 0.;
-float g_probeZ = 0.;
-
+float g_probeX = 0.; // Probe X coordinate
+float g_probeY = 0.; // Probe Y coordinate
+float g_probeZ = 0.; // Probe Z coordinate
 float g_step = 0.1; //  step size when integrating
-
 float g_linedist = 0.1; // line dist for computing stream bunch
-
 float g_rdist = 0.1; // width of streamribbon
-
-int whichIntegrator = 0;
+int whichIntegrator = 0; // euler or Rk2
 
 #include "Skeleton.h"
 Polyhedron *poly = NULL;
 
-// To read from dat files
-typedef struct node
-{
-	float x, y, z, s; // represents a vertex with the scalar
-};
-typedef struct lineseg
-{
-	node n1, n2; // indices of the vertices in grid_pts
-	node intersection;
-};
-typedef struct quad
-{
-	node v0, v1, v2, v3; // indices of 4 vertices in grid_pts
-	lineseg e0, e1, e2, e3; // indices of 4 edges in edgeList
-};
-typedef struct isoSurfaceNode {
-	double x, y, z; // vertex
-	double T; // Temperature
-	float rgb[3]; // assigned color
-	float rad; // radius
-	float dTdx, dTdy, dTdz; // gradient in each direction
-	float grad; // total gradient
-	bool draw; // flag to determine if the particular node needs to be drawn or not
-};
-typedef struct sources {
-	double xc, yc, zc;
-	double a; // temperature value of the source
-};
-sources Sources[] = {
-	{1.f, 0.f, 0.f, 90.f},
-	{-1.f, 0.3f, 0.f, 120.f},
-	{0.f, 1.f, 0.f, 120.f},
-	{0.f, 0.4f, 1.f, 170.f}
-};
 typedef struct vecNode {
 	float x, y, z;
 	float vx, vy, vz;
 	float magnitude;
 };
 
-int NX, NY;
-std::vector<lineseg> isocontours; // stores all contours for quads
-std::vector<std::vector<node>> grid;
-std::vector<std::vector<lineseg>> rightlines;
-std::vector<std::vector<lineseg>> toplines;
-std::vector<std::vector<quad>> faces;
-std::vector<lineseg> isocontours_t; // stores all contours for triangles
-
-std::vector<lineseg> isosurfacecontours; // stores all contours for quads to be used in drawing the iso surface
-
-// TODO: let user configure the size of the vector field
 const int NX3d = 8, NY3d = 8, NZ3d = 8;
-const double TEMPMAX = 100., TEMPMIN = 0.;
-isoSurfaceNode grid3d[NX3d][NY3d][NZ3d];
 
 vecNode vec_field1[NX3d][NY3d][NZ3d];
 vecNode vec_field2[NX3d][NY3d][NZ3d];
 vecNode vec_field3[NX3d][NY3d][NZ3d];
 int currentField;
 
-int g_Xslice = NX3d / 2; // default YZ plane at origin
-int g_Yslice = NY3d / 2; // default XZ plane at origin
-int g_Zslice = NZ3d / 2; // default XY plane at origin
-
-unsigned char TextureXY[NZ3d][NY3d][NX3d][4];
-unsigned char TextureXZ[NY3d][NZ3d][NX3d][4];
-unsigned char TextureYZ[NX3d][NZ3d][NY3d][4];
-
 //streamline length
 int g_streamLength = 200;
-// texture images
-const int IMG_RES = 512; // resolution of the image
-unsigned char noise_tex[IMG_RES][IMG_RES][3];
-unsigned char vec_img[IMG_RES][IMG_RES][3];
-unsigned char lic_tex[IMG_RES][IMG_RES][3];
-unsigned char lic_tex_enhanced[IMG_RES][IMG_RES][3];
 
 typedef struct streampoint {
 	float nextX, nextY, nextZ;
@@ -325,23 +219,11 @@ static float axx[3] = { 1., 0., 0. };
 static float ayy[3] = { 0., 1., 0. };
 static float azz[3] = { 0., 0., 1. };
 
-int Major; /* X, Y, or Z */
-int Xside, Yside, Zside; /* which side is visible, PLUS or MINUS */
-
 const float A = sqrt(3);
 const float B = sqrt(2);
 
-void updateDataRange(void* clientData);
-void setupTwBar();
-void TW_CALL setXYCB(const void* value, void* clientData);
-void TW_CALL getXYCB(void* value, void* clientData);
-void TW_CALL setYZCB(const void* value, void* clientData);
-void TW_CALL getYZCB(void* value, void* clientData);
-void TW_CALL setXZCB(const void* value, void* clientData);
-void TW_CALL getXZCB(void* value, void* clientData);
 void Display(void);
 void Reshape(int width, int height);
-void ReshapeNew(int width, int height);
 void Arrow(float[3], float[3]);
 void cross(float[3], float[3], float[3]);
 float dot(float[3], float[3]);
@@ -375,9 +257,6 @@ void Arrow(float tail[3], float head[3])
 	/* set size of wings and turn w into a unit vector: */
 	d = WINGS * unit(w, w);
 	/* draw the shaft of the arrow: */
-	//glPushMatrix();
-	// glTranslatef(head[0], head[1], head[2]);
-	// glScalef(0.05, 0.05, 0.05);
 	glBegin(GL_LINE_STRIP);
 	glVertex3fv(tail);
 	glVertex3fv(head);
@@ -443,7 +322,6 @@ void Arrow(float tail[3], float head[3])
 		glVertex3f(x, y, z);
 		glEnd();
 	}
-	//glPopMatrix();
 	/* done: */
 }
 
@@ -571,732 +449,6 @@ void draw_cube() {
 	glEnd();
 }
 
-//void gen_noise_tex() {
-//	for (int x = 0; x < IMG_RES; x++) {
-//		for (int y = 0; y < IMG_RES; y++) {
-//			float noise = 255 * (rand() % 32768) / 32768.0;
-//			noise_tex[x][y][0] = noise_tex[x][y][1] = noise_tex[x][y][2] = (unsigned char)noise;
-//		}
-//	}
-//}
-//
-//void determineVisibility(float mat[16]) {
-//	float nzx, nzy, nzz;
-//	nzx = mat[2];
-//	nzy = mat[6];
-//	nzz = mat[10];
-//	/* which sides of the cube are showing:
-//	*/
-//	/* the Xside being shown to the user is MINUS or PLUS */
-//	Xside = (nzx > 0. ? PLUS : MINUS);
-//	Yside = (nzy > 0. ? PLUS : MINUS);
-//	Zside = (nzz > 0. ? PLUS : MINUS);
-//	/* which direction needs to be composited: */
-//	if (fabs(nzx) > fabs(nzy) && fabs(nzx) > fabs(nzz))
-//		Major = X;
-//	else if (fabs(nzy) > fabs(nzx) && fabs(nzy) > fabs(nzz))
-//		Major = Y;
-//	else
-//		Major = Z;
-//}
-//
-//void CompositeXY(void)
-//{
-//	int x, y, z, zz;
-//	float alpha; /* opacity at this voxel */
-//	float r, g, b; /* running color composite */
-//	for (x = 0; x < NX3d; x++) {
-//		for (y = 0; y < NY3d; y++) {
-//			r = g = b = 0.;
-//			for (zz = 0; zz < NZ3d; zz++) {
-//				/* which direction to composite: */
-//				if (Zside == PLUS)
-//					z = zz;
-//				else
-//					z = (NZ3d - 1) - zz;
-//				isoSurfaceNode* node;
-//				node = &grid3d[x][y][z];
-//				if ((node->T < s_min || node->T > s_max) || (node->grad < g_gradientMin || node->grad > g_gradientMax)) { // determine whether the value is out of the range set by the range slider
-//					r = g = b = 0.;
-//					alpha = 0.;
-//				}
-//				else {
-//					r = node->rgb[0];
-//					g = node->rgb[1];
-//					b = node->rgb[2];
-//					alpha = g_opacity;
-//				}
-//				unsigned char ru = (unsigned char)(255.*r + .5);
-//				TextureXY[zz][y][x][0] = (unsigned char)(255.*r + .5);
-//				TextureXY[zz][y][x][1] = (unsigned char)(255.*g + .5);
-//				TextureXY[zz][y][x][2] = (unsigned char)(255.*b + .5);
-//				TextureXY[zz][y][x][3] = (unsigned char)(255.*alpha + .5);
-//			}
-//		}
-//	}
-//}
-//
-//void CompositeYZ(void) {
-//	int x, y, z, xx;
-//	float alpha; /* opacity at this voxel */
-//	float r, g, b; /* running color composite */
-//	for (y = 0; y < NY3d; y++) {
-//		for (z = 0; z < NZ3d; z++) {
-//			r = g = b = 0.;
-//			for (xx = 0; xx < NX3d; xx++) {
-//				/* which direction to composite: */
-//				if (Xside == PLUS)
-//					x = xx;
-//				else
-//					x = (NX3d - 1) - xx;
-//				isoSurfaceNode* node;
-//				node = &grid3d[x][y][z];
-//				if ((node->T < s_min || node->T > s_max) || (node->grad < g_gradientMin || node->grad > g_gradientMax)) { // determine whether the value is out of the range set by the range slider
-//					r = g = b = 0.;
-//					alpha = 0.;
-//				}
-//				else {
-//					r = node->rgb[0];
-//					g = node->rgb[1];
-//					b = node->rgb[2];
-//					alpha = g_opacity;
-//				}
-//				TextureYZ[xx][z][y][0] = (unsigned char)(255.*r + .5);
-//				TextureYZ[xx][z][y][1] = (unsigned char)(255.*g + .5);
-//				TextureYZ[xx][z][y][2] = (unsigned char)(255.*b + .5);
-//				TextureYZ[xx][z][y][3] = (unsigned char)(255.*alpha + .5);
-//			}
-//		}
-//	}
-//}
-//
-//void CompositeXZ(void) {
-//	int x, y, z, yy;
-//	float alpha; /* opacity at this voxel */
-//	float r, g, b; /* running color composite */
-//	for (x = 0; x < NX3d; x++) {
-//		for (z = 0; z < NZ3d; z++) {
-//			r = g = b = 0.;
-//			for (yy = 0; yy < NY3d; yy++) {
-//				/* which direction to composite: */
-//				if (Yside == PLUS)
-//					y = yy;
-//				else
-//					y = (NY3d - 1) - yy;
-//				isoSurfaceNode* node;
-//				node = &grid3d[x][y][z];
-//				if ((node->T < s_min || node->T > s_max) || (node->grad < g_gradientMin || node->grad > g_gradientMax)) { // determine whether the value is out of the range set by the range slider
-//					r = g = b = 0.;
-//					alpha = 0.;
-//				}
-//				else {
-//					r = node->rgb[0];
-//					g = node->rgb[1];
-//					b = node->rgb[2];
-//					alpha = g_opacity;
-//				}
-//				TextureXZ[yy][z][x][0] = (unsigned char)(255.*r + .5);
-//				TextureXZ[yy][z][x][1] = (unsigned char)(255.*g + .5);
-//				TextureXZ[yy][z][x][2] = (unsigned char)(255.*b + .5);
-//				TextureXZ[yy][z][x][3] = (unsigned char)(255.*alpha + .5);
-//			}
-//		}
-//	}
-//}
-//
-//void drawTexture() {
-//	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-//	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-//	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-//	GLfloat filter = GL_NEAREST;
-//	if (g_bilinear)
-//		filter = GL_LINEAR;
-//	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
-//	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
-//	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-//	glEnable(GL_TEXTURE_2D);
-//	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-//	glEnable(GL_BLEND);
-//	if (Major == Z) {
-//		float z0, dz, zcoord;
-//		int z;
-//		if (Zside == PLUS) {
-//			z0 = -1.;
-//			dz = 2. / (float)(NZ3d - 1);
-//		}
-//		else {
-//			z0 = 1.;
-//			dz = -2. / (float)(NZ3d - 1);
-//		}
-//		for (z = 0, zcoord = z0; z < NZ3d; z++, zcoord += dz) {
-//			glTexImage2D(GL_TEXTURE_2D, 0, 4, NX3d, NY3d, 0, GL_RGBA, GL_UNSIGNED_BYTE, &TextureXY[z][0][0][0]);
-//			glBegin(GL_QUADS);
-//			glTexCoord2f(0., 0.);
-//			glVertex3f(-1., -1., zcoord);
-//			glTexCoord2f(1., 0.);
-//			glVertex3f(1., -1., zcoord);
-//			glTexCoord2f(1., 1.);
-//			glVertex3f(1., 1., zcoord);
-//			glTexCoord2f(0., 1.);
-//			glVertex3f(-1., 1., zcoord);
-//			glEnd();
-//		}
-//	}
-//	else if (Major == Y) {
-//		float y0, dy, ycoord;
-//		int y;
-//		if (Yside == PLUS) {
-//			y0 = -1.;
-//			dy = 2. / (float)(NY3d - 1);
-//		}
-//		else {
-//			y0 = 1.;
-//			dy = -2. / (float)(NY3d - 1);
-//		}
-//		for (y = 0, ycoord = y0; y < NY3d; y++, ycoord += dy) {
-//			glTexImage2D(GL_TEXTURE_2D, 0, 4, NX3d, NZ3d, 0, GL_RGBA, GL_UNSIGNED_BYTE, &TextureXZ[y][0][0][0]);
-//			glBegin(GL_QUADS);
-//			glTexCoord2f(0., 0.);
-//			glVertex3f(-1., ycoord, -1.);
-//			glTexCoord2f(1., 0.);
-//			glVertex3f(1., ycoord, -1.);
-//			glTexCoord2f(1., 1.);
-//			glVertex3f(1., ycoord, 1.);
-//			glTexCoord2f(0., 1.);
-//			glVertex3f(-1., ycoord, 1.);
-//			glEnd();
-//		}
-//	}
-//	else {
-//		float x0, dx, xcoord;
-//		int x;
-//		if (Xside == PLUS) {
-//			x0 = -1.;
-//			dx = 2. / (float)(NX3d - 1);
-//		}
-//		else {
-//			x0 = 1.;
-//			dx = -2. / (float)(NX3d - 1);
-//		}
-//		for (x = 0, xcoord = x0; x < NX3d; x++, xcoord += dx) {
-//			glTexImage2D(GL_TEXTURE_2D, 0, 4, NY3d, NZ3d, 0, GL_RGBA, GL_UNSIGNED_BYTE, &TextureYZ[x][0][0][0]);
-//			glBegin(GL_QUADS);
-//			glTexCoord2f(0., 0.);
-//			glVertex3f(xcoord, -1., -1.);
-//			glTexCoord2f(1., 0.);
-//			glVertex3f(xcoord, 1., -1.);
-//			glTexCoord2f(1., 1.);
-//			glVertex3f(xcoord, 1., 1.);
-//			glTexCoord2f(0., 1.);
-//			glVertex3f(xcoord, -1., 1.);
-//			glEnd();
-//		}
-//	}
-//	glDisable(GL_TEXTURE_2D);
-//}
-
-//double getTemperature(double x, double y, double z) {
-//	double t = 0.;
-//	for (int i = 0; i < 4; i++)
-//	{
-//		double dx = x - Sources[i].xc;
-//		double dy = y - Sources[i].yc;
-//		double dz = z - Sources[i].zc;
-//		double rsqd = dx * dx + dy * dy + dz * dz;
-//		t += Sources[i].a * exp(-5.*rsqd);
-//	}
-//
-//	if (t > TEMPMAX)
-//		t = TEMPMAX;
-//	return t;
-//}
-//
-//void computeGradient() {
-//	for (int i = 0; i < NX3d; i++) {
-//		for (int j = 0; j < NY3d; j++) {
-//			for (int k = 0; k < NZ3d; k++) {
-//				if (i == 0)
-//					grid3d[i][j][k].dTdx = (grid3d[i + 1][j][k].T - grid3d[i][j][k].T) / (grid3d[i + 1][j][k].x - grid3d[i][j][k].x);
-//				else if (i == NX3d - 1)
-//					grid3d[i][j][k].dTdx = (grid3d[i][j][k].T - grid3d[i - 1][j][k].T) / (grid3d[i][j][k].x - grid3d[i - 1][j][k].x);
-//				else
-//					grid3d[i][j][k].dTdx = (grid3d[i + 1][j][k].T - grid3d[i - 1][j][k].T) / (grid3d[i + 1][j][k].x - grid3d[i - 1][j][k].x);
-//				if (j == 0)
-//					grid3d[i][j][k].dTdy = (grid3d[i][j + 1][k].T - grid3d[i][j][k].T) / (grid3d[i][j + 1][k].y - grid3d[i][j][k].y);
-//				else if (j == NY3d - 1)
-//					grid3d[i][j][k].dTdy = (grid3d[i][j][k].T - grid3d[i][j - 1][k].T) / (grid3d[i][j][k].y - grid3d[i][j - 1][k].y);
-//				else
-//					grid3d[i][j][k].dTdy = (grid3d[i][j + 1][k].T - grid3d[i][j - 1][k].T) / (grid3d[i][j + 1][k].y - grid3d[i][j - 1][k].y);
-//				if (k == 0)
-//					grid3d[i][j][k].dTdz = (grid3d[i][j][k + 1].T - grid3d[i][j][k].T) / (grid3d[i][j][k + 1].z - grid3d[i][j][k].z);
-//				else if (k == NZ3d - 1)
-//					grid3d[i][j][k].dTdz = (grid3d[i][j][k].T - grid3d[i][j][k - 1].T) / (grid3d[i][j][k].z - grid3d[i][j][k - 1].z);
-//				else
-//					grid3d[i][j][k].dTdz = (grid3d[i][j][k + 1].T - grid3d[i][j][k - 1].T) / (grid3d[i][j][k + 1].z - grid3d[i][j][k - 1].z);
-//
-//				grid3d[i][j][k].grad = sqrt(pow(grid3d[i][j][k].dTdx, 2) + pow(grid3d[i][j][k].dTdy, 2) + pow(grid3d[i][j][k].dTdz, 2));
-//			}
-//		}
-//	}
-//}
-//
-//void populate3dStruct() {
-//	double ix = 2. / NX3d; // splitting data into 50 samples along the x axis
-//	double iy = 2. / NY3d;
-//	double iz = 2. / NZ3d;
-//	for (int i = 0; i < NX3d; i++) {
-//		for (int j = 0; j < NY3d; j++) {
-//			for (int k = 0; k < NZ3d; k++) {
-//				isoSurfaceNode node;
-//				node.x = (ix * i) - 1;
-//				node.y = (iy * j) - 1;
-//				node.z = (iz * k) - 1;
-//				node.T = getTemperature(node.x, node.y, node.z);
-//				node.draw = true;
-//				grid3d[i][j][k] = node;
-//			}
-//		}
-//	}
-//}
-//
-//void color3dStruct() {
-//	for (int i = 0; i < NX3d; i++) {
-//		for (int j = 0; j < NY3d; j++) {
-//			for (int k = 0; k < NZ3d; k++) {
-//				isoSurfaceNode* node;
-//				node = &grid3d[i][j][k];
-//				if ((node->T >= s_min && node->T <= s_max) && (node->grad >= g_gradientMin && node->grad <= g_gradientMax)) {
-//					colorFunction(node->T, node->rgb);
-//					node->draw = true;
-//				}
-//				else
-//					node->draw = false;
-//			}
-//		}
-//	}
-//}
-
-//void Load_data_on_uniformGrids(const char *name)
-//{
-//	int i, j;
-//	FILE* fp = fopen(name, "r");
-//	if (fp == NULL) return;
-//	fscanf(fp, "%d %d\n", &NX, &NY);
-//	grid.clear();
-//	for (i = 0; i < NY; i++) {
-//		std::vector<node> tmpv;
-//		for (j = 0; j < NX; j++) {
-//			node tmp;
-//			fscanf(fp, "%f, %f, %f, %f \n", &tmp.x, &tmp.y, &tmp.z, &tmp.s);
-//			tmpv.push_back(tmp);
-//		}
-//		grid.push_back(tmpv);
-//	}
-//	fclose(fp);
-//}
-//
-//void build_edge_list() {
-//	int i, j;
-//	rightlines.clear();
-//	for (i = 0; i < NY; i++) {
-//		std::vector<lineseg> tmpl;
-//		for (j = 0; j < NX - 1; j++) {
-//			node n1 = grid[i][j];
-//			node n2 = grid[i][j + 1];
-//			lineseg rightedge;
-//			rightedge.n1 = n1;
-//			rightedge.n2 = n2;
-//			rightedge.intersection;
-//			tmpl.push_back(rightedge);
-//		}
-//		rightlines.push_back(tmpl);
-//	}
-//	toplines.clear();
-//	for (i = 0; i < NY - 1; i++) {
-//		std::vector<lineseg> tmpl;
-//		for (j = 0; j < NX; j++) {
-//			node n1 = grid[i][j];
-//			node n2 = grid[i + 1][j];
-//			lineseg topedge;
-//			topedge.n1 = n1;
-//			topedge.n2 = n2;
-//			topedge.intersection;
-//			tmpl.push_back(topedge);
-//		}
-//		toplines.push_back(tmpl);
-//	}
-//}
-//
-//void build_face_list() {
-//	int i, j;
-//	faces.clear();
-//	for (i = 0; i < NY - 1; i++) {
-//		std::vector<quad> tmpf;
-//		for (j = 0; j < NX - 1; j++) {
-//			quad face;
-//			node v0 = grid[i][j];
-//			node v1 = grid[i][j + 1];
-//			node v2 = grid[i + 1][j + 1];
-//			node v3 = grid[i + 1][j];
-//			lineseg ebr = rightlines[i][j]; // bottom right edge
-//			lineseg etr = rightlines[i + 1][j]; // top right edge
-//			lineseg elt = toplines[i][j]; // left top edge
-//			lineseg ert = toplines[i][j + 1]; // right top edge
-//			face.v0 = v0;
-//			face.v1 = v1;
-//			face.v2 = v2;
-//			face.v3 = v3;
-//			face.e0 = ebr;
-//			face.e1 = ert;
-//			face.e2 = etr;
-//			face.e3 = elt;
-//			tmpf.push_back(face);
-//		}
-//		faces.push_back(tmpf);
-//	}
-//}
-//
-//void copyVertices(isoSurfaceNode* s1, isoSurfaceNode* s2, node* n1, node* n2) {
-//	n1->x = s1->x;
-//	n1->y = s1->y;
-//	n1->z = s1->z;
-//	n2->x = s2->x;
-//	n2->y = s2->y;
-//	n2->z = s2->z;
-//}
-//
-//void computeIsoSurfaces(isoSurfaceNode* n[]) {
-//	bool intersects[4] = { false, false, false, false };
-//	node intersections[4];
-//	int ctr = 0;
-//	for (int l = 0; l < 4; l++) {
-//		isoSurfaceNode *s1, *s2;
-//		switch (l) {
-//		case 0:
-//			s1 = n[0];
-//			s2 = n[1];
-//			break;
-//		case 1:
-//			s1 = n[1];
-//			s2 = n[2];
-//			break;
-//		case 2:
-//			s1 = n[2];
-//			s2 = n[3];
-//			break;
-//		case 3:
-//			s1 = n[3];
-//			s2 = n[0];
-//			break;
-//		}
-//		if (s1->T == s2->T && s1->T != g_sprime)
-//			continue;
-//		if (s1->T == s2->T && s1->T == g_sprime) {
-//			node node1, node2;
-//			copyVertices(s1, s2, &node1, &node2);
-//			lineseg contour;
-//			contour.n1 = node1;
-//			contour.n2 = node2;
-//			isosurfacecontours.push_back(contour);
-//			ctr++;
-//			continue;
-//		}
-//		float tprime;
-//		tprime = (g_sprime - s1->T) / (s2->T - s1->T);
-//		if (tprime >= 0 && tprime <= 1) {
-//			node intersect;
-//			ctr++;
-//			intersect.x = ((1 - tprime) * s1->x) + (tprime * s2->x);
-//			intersect.y = ((1 - tprime) * s1->y) + (tprime * s2->y);
-//			intersect.z = ((1 - tprime) * s1->z) + (tprime * s2->z);
-//			intersections[l] = intersect;
-//			intersects[l] = true;
-//		}
-//	}
-//	if (ctr == 0)
-//		return;
-//	if (ctr == 1 || ctr == 3)
-//		char *c = "Something is very wrong";
-//	if (ctr == 2) {
-//		lineseg contour;
-//		if (intersects[0]) {
-//			contour.n1 = intersections[0];
-//			if (intersects[1])
-//				contour.n2 = intersections[1];
-//			else if (intersects[2])
-//				contour.n2 = intersections[2];
-//			else
-//				contour.n2 = intersections[3];
-//		}
-//		else if (intersects[1]) {
-//			contour.n1 = intersections[1];
-//			if (intersects[2])
-//				contour.n2 = intersections[2];
-//			else
-//				contour.n2 = intersections[3];
-//		}
-//		else {
-//			contour.n1 = intersections[2];
-//			contour.n2 = intersections[3];
-//		}
-//		isosurfacecontours.push_back(contour);
-//		return;
-//	}
-//	if (ctr == 4) {
-//		float s0 = n[0]->T;
-//		float s1 = n[1]->T;
-//		float s2 = n[2]->T;
-//		float s3 = n[3]->T;
-//		float m = (s0 + s1 + s2 + s3) / 4;
-//		lineseg contour1, contour2;
-//		if (g_sprime <= m) {
-//			if (s0 <= m) {
-//				contour1.n1 = intersections[0];
-//				contour1.n2 = intersections[3];
-//				contour2.n1 = intersections[1];
-//				contour2.n2 = intersections[2];
-//			}
-//			else {
-//				contour1.n1 = intersections[0];
-//				contour1.n2 = intersections[1];
-//				contour2.n1 = intersections[3];
-//				contour2.n2 = intersections[2];
-//			}
-//		}
-//		else {
-//			if (s0 <= m) {
-//				contour1.n1 = intersections[0];
-//				contour1.n2 = intersections[1];
-//				contour2.n1 = intersections[3];
-//				contour2.n2 = intersections[2];
-//			}
-//			else {
-//				contour1.n1 = intersections[0];
-//				contour1.n2 = intersections[3];
-//				contour2.n1 = intersections[1];
-//				contour2.n2 = intersections[2];
-//			}
-//		}
-//		isosurfacecontours.push_back(contour1);
-//		isosurfacecontours.push_back(contour2);
-//	}
-//}
-//
-//void computeIsoSurfaces(float g_sprime) {
-//	if (g_sprime < s_min || g_sprime > s_max)
-//		return;
-//	isosurfacecontours.clear();
-//	int i, j, k;
-//	for (k = 0; k < NZ3d; k++) {
-//		for (i = 0; i < NX3d - 1; i++) {
-//			for (j = 0; j < NY3d - 1; j++) {
-//				// Process quad whose corner is at [i, j, k] in XY plane
-//				isoSurfaceNode* n[4] = { &grid3d[i][j][k], &grid3d[i + 1][j][k], &grid3d[i + 1][j + 1][k], &grid3d[i][j + 1][k] };
-//				computeIsoSurfaces(n);
-//			}
-//		}
-//	}
-//	for (i = 0; i < NX3d; i++) {
-//		for (k = 0; k < NZ3d - 1; k++) {
-//			for (j = 0; j < NY3d - 1; j++) {
-//				// Process quad whose corner is at [i, j, k] in YZ plane
-//				isoSurfaceNode* n[4] = { &grid3d[i][j][k], &grid3d[i][j + 1][k], &grid3d[i][j + 1][k + 1], &grid3d[i][j][k + 1] };
-//				computeIsoSurfaces(n);
-//			}
-//		}
-//	}
-//	for (j = 0; j < NY3d; j++) {
-//		for (k = 0; k < NZ3d - 1; k++) {
-//			for (i = 0; i < NX3d - 1; i++) {
-//				// Process quad whose corner is at [i, j, k] in XZ plane
-//				isoSurfaceNode* n[4] = { &grid3d[i][j][k], &grid3d[i + 1][j][k], &grid3d[i + 1][j][k + 1], &grid3d[i][j][k + 1] };
-//				computeIsoSurfaces(n);
-//			}
-//		}
-//	}
-//}
-//
-//void computeContours(float g_sprime) {
-//	if (g_sprime < s_min || g_sprime > s_max)
-//		return;
-//	// for each face compute the intersection
-//	int i, j, k;
-//	for (i = 0; i < faces.size(); i++) {
-//		std::vector<quad> tmpf = faces[i];
-//		for (j = 0; j < tmpf.size(); j++) { // get edges for every face in a row
-//			quad face = tmpf[j];
-//			lineseg* e[4] = { &face.e0, &face.e1, &face.e2, &face.e3 };
-//			bool intersects[4] = { false, false, false, false };
-//			int ctr = 0;
-//			for (k = 0; k < 4; k++) {
-//				// compute intersection for every edge and store on edge itself
-//				node n1 = e[k]->n1;
-//				node n2 = e[k]->n2;
-//				if (n1.s == n2.s && n1.s != g_sprime)
-//					continue;
-//				if (n1.s == n2.s && n1.s == g_sprime) {
-//					lineseg contour;
-//					contour.n1 = n1;
-//					contour.n2 = n2;
-//					isocontours.push_back(contour);
-//					ctr++; // there's an intersection
-//					continue;
-//				}
-//				float tprime, xprime, yprime, zprime;
-//				tprime = (g_sprime - n1.s) / (n2.s - n1.s);
-//				if (tprime >= 0 && tprime <= 1) {
-//					ctr++; // there's an intersection so increment the counter
-//					xprime = ((1 - tprime) * n1.x) + (tprime * n2.x);
-//					yprime = ((1 - tprime) * n1.y) + (tprime * n2.y);
-//					zprime = ((1 - tprime) * n1.z) + (tprime * n2.z);
-//					e[k]->intersection.x = xprime;
-//					e[k]->intersection.y = yprime;
-//					e[k]->intersection.z = zprime;
-//					e[k]->intersection.s = g_sprime;
-//					intersects[k] = true;
-//				}
-//			}
-//			if (ctr == 0)
-//				continue;
-//			if (ctr == 1 || ctr == 3) {
-//				char* c = "Something is very wrong";
-//			}
-//			// connect the intersections based on the count
-//			if (ctr == 2) { // if there are 2 intersections
-//				lineseg contour;
-//				if (intersects[0]) {
-//					contour.n1 = e[0]->intersection;
-//					if (intersects[1])
-//						contour.n2 = e[1]->intersection;
-//					else if (intersects[2])
-//						contour.n2 = e[2]->intersection;
-//					else
-//						contour.n2 = e[3]->intersection;
-//				}
-//				else if (intersects[1]) {
-//					contour.n1 = e[1]->intersection;
-//					if (intersects[2])
-//						contour.n2 = e[2]->intersection;
-//					else
-//						contour.n2 = e[3]->intersection;
-//				}
-//				else {
-//					contour.n1 = e[2]->intersection;
-//					contour.n2 = e[3]->intersection;
-//				}
-//				isocontours.push_back(contour);
-//				continue;
-//			}
-//			if (ctr == 4) { // If there are 4 intersections. Condition hit for dataset2 at g_sprime = 49.000
-//				float s0 = face.v0.s;
-//				float s1 = face.v1.s;
-//				float s2 = face.v2.s;
-//				float s3 = face.v3.s;
-//				float m = (s0 + s1 + s2 + s3) / 4;
-//				lineseg contour1, contour2;
-//				if (g_sprime <= m) {
-//					if (s0 <= m) {
-//						contour1.n1 = e[0]->intersection;
-//						contour1.n2 = e[3]->intersection;
-//						contour2.n1 = e[1]->intersection;
-//						contour2.n2 = e[2]->intersection;
-//					}
-//					else {
-//						contour1.n1 = e[0]->intersection;
-//						contour1.n2 = e[1]->intersection;
-//						contour2.n1 = e[3]->intersection;
-//						contour2.n2 = e[2]->intersection;
-//					}
-//				}
-//				else {
-//					if (s0 <= m) {
-//						contour1.n1 = e[0]->intersection;
-//						contour1.n2 = e[1]->intersection;
-//						contour2.n1 = e[3]->intersection;
-//						contour2.n2 = e[2]->intersection;
-//					}
-//					else {
-//						contour1.n1 = e[0]->intersection;
-//						contour1.n2 = e[3]->intersection;
-//						contour2.n1 = e[1]->intersection;
-//						contour2.n2 = e[2]->intersection;
-//					}
-//				}
-//				isocontours.push_back(contour1);
-//				isocontours.push_back(contour2);
-//			}
-//		}
-//	}
-//}
-//
-//void computeContoursTriangles(float g_sprime) {
-//	if (g_sprime < s_min || g_sprime > s_max)
-//		return;
-//	for (int i = 0; i < poly->ntris; i++) {
-//		Triangle* tmpt = poly->tlist[i];
-//		Edge **e = tmpt->edges;
-//		int ctr = 0;
-//		std::vector<node> intersections;
-//		for (int j = 0; j < 3; j++) {
-//			Vertex** v = e[j]->verts;
-//			Vertex* v0 = v[0];
-//			Vertex* v1 = v[1];
-//			if (v0->s == v1->s && v0->s != g_sprime)
-//				continue;
-//			if (v1->s == v1->s && v0->s == g_sprime) {
-//				lineseg contour;
-//				node n1, n2;
-//				n1.x = v0->x;
-//				n2.x = v1->x;
-//				n1.y = v0->y;
-//				n2.y = v1->y;
-//				n1.z = v0->z;
-//				n2.z = v1->z;
-//				n1.s = v0->s;
-//				n2.s = v1->s;
-//				contour.n1 = n1;
-//				contour.n2 = n2;
-//				ctr++;
-//				isocontours_t.push_back(contour);
-//				break;
-//			}
-//			float tprime, xprime, yprime, zprime;
-//			node intersection;
-//			tprime = (g_sprime - v0->s) / (v1->s - v0->s);
-//			if (tprime >= 0 && tprime <= 1) {
-//				xprime = ((1 - tprime) * v0->x) + (tprime * v1->x);
-//				yprime = ((1 - tprime) * v0->y) + (tprime * v1->y);
-//				zprime = ((1 - tprime) * v0->z) + (tprime * v1->z);
-//				intersection.x = xprime;
-//				intersection.y = yprime;
-//				intersection.z = zprime;
-//				intersection.s = g_sprime;
-//				intersections.push_back(intersection);
-//				ctr++;
-//			}
-//		}
-//		if (ctr == 1 || ctr == 3) {
-//			char* c = "Something is very wrong";
-//		}
-//		if (ctr == 2) {
-//			lineseg contour;
-//			node n1, n2;
-//			n1.x = intersections[0].x;
-//			n1.y = intersections[0].y;
-//			n1.z = intersections[0].z;
-//			n1.s = intersections[0].s;
-//			n2.x = intersections[1].x;
-//			n2.y = intersections[1].y;
-//			n2.z = intersections[1].z;
-//			n2.s = intersections[1].s;
-//			contour.n1 = n1;
-//			contour.n2 = n2;
-//			isocontours_t.push_back(contour);
-//		}
-//	}
-//}
-
-
 // Routine to set a quaternion from a rotation axis and angle
 // ( input axis = float[3] angle = float  output: quat = float[4] )
 void SetQuaternionFromAxisAngle(const float *axis, float angle, float *quat)
@@ -1309,69 +461,6 @@ void SetQuaternionFromAxisAngle(const float *axis, float angle, float *quat)
 	quat[2] = sina2 * axis[2] / norm;
 	quat[3] = (float)cos(0.5f * angle);
 }
-
-//void draw_arrows(double head[2], float direct[2])
-//{
-//	if (g_colorPlot)
-//		glColor3f(0., 0., 0.);
-//	else
-//		glColor3f(1., 1., 0.);
-//	glPushMatrix();
-//	glTranslatef(head[0], head[1], 0);
-//	glRotatef(atan2(direct[1], direct[0]) * 360 / (2 * M_PI), 0, 0, 1);
-//	// draw arrow head
-//	glScalef(0.03, 0.03, 1);
-//	glBegin(GL_TRIANGLES);
-//	glVertex2f(0, 0);
-//	glVertex2f(-0.35, 0.12);
-//	glVertex2f(-0.35, -0.12);
-//	glEnd();
-//	// draw arrow body
-//	glScalef(0.3, 0.3, 1);
-//	//glScalef(100. / poly->nverts, 100. / poly->nverts, 1);
-//	glBegin(GL_LINES);
-//	glVertex2f(0, 0);
-//	glVertex2f(-3, 0);
-//	glEnd();
-//	glPopMatrix();
-//}
-
-//void drawArrowPlot() {
-//	for (int i = 0; i < poly->nverts; i++) {
-//		Vertex *temp_v = poly->vlist[i];
-//		double arrow_head[2] = { temp_v->x, temp_v->y };
-//		float arrow_direct[2] = { temp_v->vx, temp_v->vy };
-//		draw_arrows(arrow_head, arrow_direct);
-//	}
-//}
-
-// TODO: user interface to scale the arrow size
-
-void draw_3d_arrows(float head[3], float direct[3], float magnitude) {
-	float rgb[3];
-	colorFunction(magnitude, rgb);
-	glColor3f(rgb[0], rgb[1], rgb[2]);
-	glPushMatrix();
-	glTranslatef(head[0], head[1], head[2]);
-	glRotatef(atan2(direct[1], direct[0]) * 360 / (2 * M_PI), 0, 0, 1);
-	glRotatef(atan2(direct[2], direct[1]) * 360 / (2 * M_PI), 1, 0, 0);
-	glRotatef(atan2(direct[2], direct[0]) * 360 / (2 * M_PI), 0, 1, 0);
-	// draw arrow head
-	glScalef(0.1, 0.1, 0.1);
-	glBegin(GL_TRIANGLES);
-	glVertex2f(0, 0);
-	glVertex2f(-0.5, 0.5);
-	glVertex2f(-0.5, -0.5);
-	glEnd();
-	// draw arrow body
-	glScalef(0.3, 0.3, 0.3);
-	glBegin(GL_LINES);
-	glVertex2f(0, 0);
-	glVertex2f(-3, 0);
-	glEnd();
-	glPopMatrix();
-}
-
 
 void draw_3d_arrows_field1() {
 	for (int i = 0; i < NX3d; i++) {
@@ -1754,29 +843,6 @@ void InitAxesLists(void)
 	glEndList();
 }
 
-//void setExtremePointers() {
-//	switch (whichPlot)
-//	{
-//	case 0:
-//		max_ptr = &s_max;
-//		min_ptr = &s_min;
-//		break;
-//	case 1:
-//		max_ptr = &a_max;
-//		min_ptr = &a_min;
-//		break;
-//	case 2:
-//		max_ptr = &vx_max;
-//		min_ptr = &vx_min;
-//		break;
-//	case 3:
-//		max_ptr = &vy_max;
-//		min_ptr = &vy_min;
-//	default:
-//		break;
-//	}
-//}
-
 void Rainbow_color(float s, float rgb[3])
 {
 	float t = (s - *min_ptr) / (*max_ptr - *min_ptr);
@@ -1874,328 +940,6 @@ void setColorFunction() {
 	}
 }
 
-//void calcLimits() {
-//	if (isPoly == 0) {
-//		s_max = s_min = poly->tlist[0]->verts[0]->magnitude;
-//		a_max = a_min = poly->tlist[0]->verts[0]->angle;
-//		vx_max = vx_min = poly->tlist[0]->verts[0]->vx;
-//		vy_max = vy_min = poly->tlist[0]->verts[0]->vy;
-//		for (int i = 0; i < poly->ntris; i++) {
-//			Triangle *temp_t = poly->tlist[i];
-//			for (int j = 0; j < 3; j++) {
-//				Vertex *temp_v = temp_t->verts[j];
-//				float magnitude = temp_v->magnitude;
-//				float angle = temp_v->angle;
-//				float vx = temp_v->vx;
-//				float vy = temp_v->vy;
-//				if (magnitude > s_max)
-//					s_max = magnitude;
-//				if (magnitude < s_min)
-//					s_min = magnitude;
-//				if (angle > a_max)
-//					a_max = angle;
-//				if (angle < a_min)
-//					a_min = angle;
-//				if (vx > vx_max)
-//					vx_max = vx;
-//				if (vx < vx_min)
-//					vx_min = vx;
-//				if (vy > vy_max)
-//					vy_max = vy;
-//				if (vy < vy_min)
-//					vy_min = vy;
-//			}
-//		}
-//	}
-//	else if (isPoly == 1) {
-//		s_max = s_min = grid[0][0].s;
-//		for (int i = 0; i < NY; i++) {
-//			for (int j = 0; j < NX; j++) {
-//				if (grid[i][j].s < s_min)
-//					s_min = grid[i][j].s;
-//				if (grid[i][j].s > s_max)
-//					s_max = grid[i][j].s;
-//			}
-//		}
-//	}
-//	else {
-//		s_max = s_min = grid3d[0][0][0].T;
-//		g_gradientMax = g_gradientMin = grid3d[0][0][0].grad;
-//		for (int i = 0; i < NX3d; i++) {
-//			for (int j = 0; j < NY3d; j++) {
-//				for (int k = 0; k < NZ3d; k++) {
-//					if (grid3d[i][j][k].T < s_min)
-//						s_min = grid3d[i][j][k].T;
-//					if (grid3d[i][j][k].T > s_max)
-//						s_max = grid3d[i][j][k].T;
-//					if (grid3d[i][j][k].grad < g_gradientMin)
-//						g_gradientMin = grid3d[i][j][k].grad;
-//					if (grid3d[i][j][k].grad > g_gradientMax)
-//						g_gradientMax = grid3d[i][j][k].grad;
-//				}
-//			}
-//		}
-//		abs_s_max = s_max;
-//		abs_s_min = s_min;
-//		g_gradientAbsMax = g_gradientMax;
-//	}
-//}
-
-//void drawSquareObject() {
-//	for (int i = 0; i < NY - 1; i++) {
-//		for (int j = 0; j < NX - 1; j++) {
-//			quad face = faces[i][j];
-//			float rgb[3];
-//			node v;
-//			glBegin(GL_QUADS);
-//			v = face.v0;
-//			colorFunction(v.s, rgb);
-//			glColor3f(rgb[0], rgb[1], rgb[2]);
-//			glVertex3f(v.x, v.y, v.z);
-//			v = face.v1;
-//			colorFunction(v.s, rgb);
-//			glColor3f(rgb[0], rgb[1], rgb[2]);
-//			glVertex3f(v.x, v.y, v.z);
-//			v = face.v2;
-//			colorFunction(v.s, rgb);
-//			glColor3f(rgb[0], rgb[1], rgb[2]);
-//			glVertex3f(v.x, v.y, v.z);
-//			v = face.v3;
-//			colorFunction(v.s, rgb);
-//			glColor3f(rgb[0], rgb[1], rgb[2]);
-//			glVertex3f(v.x, v.y, v.z);
-//			glEnd();
-//		}
-//	}
-//	// draw the contours
-//	glColor3f(0, 0, 0);
-//	for (int i = 0; i < isocontours.size(); i++) {
-//		node v1 = isocontours[i].n1;
-//		node v2 = isocontours[i].n2;
-//		glBegin(GL_LINES);
-//		glVertex3f(v1.x, v1.y, v1.z);
-//		glVertex3f(v2.x, v2.y, v2.z);
-//		glEnd();
-//	}
-//}
-//
-//void drawTriangularObject() {
-//	// draw and color object
-//	for (int i = 0; i < poly->ntris; i++) {
-//		Triangle *temp_t = poly->tlist[i];
-//		glBegin(GL_POLYGON);
-//		for (int j = 0; j < 3; j++) {
-//			Vertex *temp_v = temp_t->verts[j];
-//			glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-//			float rgb[3];
-//			float x = temp_v->x;
-//			float y = temp_v->y;
-//			float z = temp_v->z;
-//			// float s = temp_v->s;
-//			if (whichPlot == 0)
-//				colorFunction(temp_v->magnitude, rgb);
-//			else if (whichPlot == 1)
-//				colorFunction(temp_v->angle, rgb);
-//			else if (whichPlot == 2)
-//				colorFunction(temp_v->vx, rgb);
-//			else if (whichPlot == 3)
-//				colorFunction(temp_v->vy, rgb);
-//			glColor4f(rgb[0], rgb[1], rgb[2], 1);
-//			glVertex3d(x, y, z);
-//		}
-//		glEnd();
-//	}
-//	if (g_arrows)
-//		drawArrowPlot();
-//	// draw contours
-//	/*glColor3f(0, 0, 0);
-//	for (int i = 0; i < isocontours_t.size(); i++) {
-//		node v1 = isocontours_t[i].n1;
-//		node v2 = isocontours_t[i].n2;
-//		glBegin(GL_LINES);
-//		glVertex3f(v1.x, v1.y, v1.z);
-//		glVertex3f(v2.x, v2.y, v2.z);
-//		glEnd();
-//	}*/
-//}
-
-//void draw3dObject(void(*colorFunction)(float s, float rgb[3])) {
-//	for (int i = 0; i < NX3d; i++) {
-//		for (int j = 0; j < NY3d; j++) {
-//			for (int k = 0; k < NZ3d; k++) {
-//				float rgb[3];
-//				isoSurfaceNode current = grid3d[i][j][k];
-//				glBegin(GL_POINTS);
-//				colorFunction(current.T, rgb);
-//				glColor3d(rgb[0], rgb[1], rgb[2]);
-//				glVertex3d(current.x, current.y, current.z);
-//				glEnd();
-//			}
-//		}
-//	}
-//}
-//
-//void draw3dVis() {
-//	isoSurfaceNode curr;
-//	if (g_enableSlices) {
-//		if (g_XYplane) {
-//			for (int i = 0; i < NX3d - 1; i++) {
-//				for (int j = 0; j < NY3d - 1; j++) {
-//					// construct a plane and color it
-//					curr = grid3d[i][j][g_Zslice];
-//					if (!curr.draw)
-//						continue;
-//					glBegin(GL_QUADS);
-//					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-//					glVertex3f(curr.x, curr.y, curr.z);
-//					curr = grid3d[i + 1][j][g_Zslice];
-//					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-//					glVertex3f(curr.x, curr.y, curr.z);
-//					curr = grid3d[i + 1][j + 1][g_Zslice];
-//					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-//					glVertex3f(curr.x, curr.y, curr.z);
-//					curr = grid3d[i][j + 1][g_Zslice];
-//					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-//					glVertex3f(curr.x, curr.y, curr.z);
-//					glEnd();
-//				}
-//			}
-//		}
-//		if (g_YZplane) {
-//			for (int j = 0; j < NY3d - 1; j++) {
-//				for (int k = 0; k < NZ3d - 1; k++) {
-//					// construct a plane and color it
-//					curr = grid3d[g_Xslice][j][k];
-//					if (!curr.draw)
-//						continue;
-//					glBegin(GL_QUADS);
-//					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-//					glVertex3f(curr.x, curr.y, curr.z);
-//					curr = grid3d[g_Xslice][j + 1][k];
-//					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-//					glVertex3f(curr.x, curr.y, curr.z);
-//					curr = grid3d[g_Xslice][j + 1][k + 1];
-//					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-//					glVertex3f(curr.x, curr.y, curr.z);
-//					curr = grid3d[g_Xslice][j][k + 1];
-//					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-//					glVertex3f(curr.x, curr.y, curr.z);
-//					glEnd();
-//				}
-//			}
-//		}
-//		if (g_XZplane) {
-//			for (int i = 0; i < NX3d - 1; i++) {
-//				for (int k = 0; k < NZ3d - 1; k++) {
-//					// construct a plane and color it
-//					curr = grid3d[i][g_Yslice][k];
-//					if (!curr.draw)
-//						continue;
-//					glBegin(GL_QUADS);
-//					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-//					glVertex3f(curr.x, curr.y, curr.z);
-//					curr = grid3d[i + 1][g_Yslice][k];
-//					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-//					glVertex3f(curr.x, curr.y, curr.z);
-//					curr = grid3d[i + 1][g_Yslice][k + 1];
-//					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-//					glVertex3f(curr.x, curr.y, curr.z);
-//					curr = grid3d[i][g_Yslice][k + 1];
-//					glColor3d(curr.rgb[0], curr.rgb[1], curr.rgb[2]);
-//					glVertex3f(curr.x, curr.y, curr.z);
-//					glEnd();
-//				}
-//			}
-//		}
-//	}
-//
-//	// Draw contours if flag is set
-//	if (g_isoSurfaces) {
-//		glColor3f(0, 1, 1);
-//		for (int i = 0; i < isosurfacecontours.size(); i++) {
-//			node* v1 = &isosurfacecontours[i].n1;
-//			node* v2 = &isosurfacecontours[i].n2;
-//			glBegin(GL_LINES);
-//			glVertex3f(v1->x, v1->y, v1->z);
-//			glVertex3f(v2->x, v2->y, v2->z);
-//			glEnd();
-//		}
-//	}
-//}
-
-//void DisplayNew(void) {
-//	glViewport(0, 0, (GLsizei)IMG_RES, (GLsizei)IMG_RES);
-//	glMatrixMode(GL_PROJECTION);
-//	glLoadIdentity();
-//	gluOrtho2D(0, 1, 0, 1);
-//	glEnable(GL_TEXTURE_2D);
-//	glEnable(GL_BLEND);
-//	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-//	glClear(GL_COLOR_BUFFER_BIT);
-//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-//	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-//	glShadeModel(GL_FLAT);
-//	////Test noise texture (for debugging purpose)
-//	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0,	GL_RGB, GL_UNSIGNED_BYTE, noise_tex);
-//	//// Test vector field image (for debugging purpose)
-//	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0,	GL_RGB, GL_UNSIGNED_BYTE, vec_img);
-//	// Display LIC image using texture mapping
-//	if (!g_enhanceLIC)
-//		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, lic_tex);
-//	else if (g_enhanceLIC)
-//		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, lic_tex_enhanced);
-//	glBegin(GL_QUAD_STRIP);
-//	glTexCoord2f(0.0, 0.0); glVertex2f(0.0, 0.0);
-//	glTexCoord2f(0.0, 1.0); glVertex2f(0.0, 1.0);
-//	glTexCoord2f(1.0, 0.0); glVertex2f(1.0, 0.0);
-//	glTexCoord2f(1.0, 1.0); glVertex2f(1.0, 1.0);
-//	glEnd();
-//	glDisable(GL_TEXTURE_2D);
-//	if (g_arrows)
-//		drawArrowPlot();
-//	if (g_coloredLIC) {
-//		glShadeModel(GL_SMOOTH);
-//		setColorFunction();
-//		/*setExtremePointers();*/
-//		for (int i = 0; i < poly->ntris; i++) {
-//			Triangle *t = poly->tlist[i];
-//			glBegin(GL_POLYGON);
-//			for (int j = 0; j < 3; j++) {
-//				Vertex *v = t->verts[j];
-//				glNormal3d(v->normal.entry[0], v->normal.entry[1], v->normal.entry[2]);
-//				float rgb[3];
-//				if (whichPlot == 0)
-//					colorFunction(v->magnitude, rgb);
-//				else if (whichPlot == 1)
-//					colorFunction(v->angle, rgb);
-//				else if (whichPlot == 2)
-//					colorFunction(v->vx, rgb);
-//				else if (whichPlot == 3)
-//					colorFunction(v->vy, rgb);
-//				glColor4f(rgb[0], rgb[1], rgb[2], 0.45);
-//				glVertex3d(v->x, v->y, v->z);
-//			}
-//			glEnd();
-//		}
-//	}
-//	if (g_colorPlot) {
-//		g_coloredLIC = false;
-//		glDisable(GL_BLEND);
-//		glShadeModel(GL_SMOOTH);
-//		setColorFunction();
-//		/*setExtremePointers();*/
-//		drawTriangularObject();
-//	}
-//	TwDraw();
-//	glutSwapBuffers();
-//	glFlush();
-//	glutPostRedisplay();
-//}
-
-
 void draw_streamlines() {
 	float rgb[3];
 	for (int i = 0; i < (int) streamlines.size(); i++) {
@@ -2288,38 +1032,37 @@ void Display(void)
 	//glCallList(g_CurrentShape);
 
 	setColorFunction();
-	//setExtremePointers();
-	//// Draw the 3D object
-	//if (isPoly == 1) drawSquareObject();
-	//else if (isPoly == 0) drawTriangularObject();
-	////else draw3dObject(colorFunction);
-	//else {
-	//	draw3dVis();
-	//	if (g_enableDVR) {
-	//		determineVisibility(mat);
-	//		CompositeXY();
-	//		CompositeXZ();
-	//		CompositeYZ();
-	//		drawTexture();
-	//	}
-	//}
-
 	draw_cube();
 
 	if (g_arrows) {
-		if (currentField == 1)
+		if (currentField == 1) {
+			max_ptr = &max_sv1;
+			min_ptr = &min_sv1;
 			draw_3d_arrows_field1();
-		else if (currentField == 2)
-			draw_3d_arrows_field2();
-		else
+		}
+		else if (currentField == 2) {
+			max_ptr = &max_sv2;
+			min_ptr = &min_sv2;
+			draw_3d_arrows_field2();			
+		}
+		else {
+			max_ptr = &max_sv3;
+			min_ptr = &min_sv3;
 			draw_3d_arrows_field3();
+		}
 	}
 
-	if (g_streamlines)
+	if (g_streamlines) {
+		max_ptr = &abs_s_max;
+		min_ptr = &abs_s_min;
 		draw_streamlines();
+	}
 
-	if (g_streamribbon)
+	if (g_streamribbon) {
+		max_ptr = &abs_s_max;
+		min_ptr = &abs_s_min;
 		draw_streamribbon();
+	}
 
 		// Draw axes
 	if (g_Axes)
@@ -2337,19 +1080,6 @@ void Display(void)
 	// Recall Display at next frame
 	glutPostRedisplay();
 }
-
-//void ReshapeNew(int width, int height) {
-//	// Set OpenGL viewport and camera
-//	glViewport(0, 0, (GLsizei)width, (GLsizei)height);
-//	glMatrixMode(GL_PROJECTION);
-//	glLoadIdentity();
-//	gluOrtho2D(0, 1, 0, 1);
-//	glClearColor(0, 0, 0, 1);
-//	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-//
-//	// Send the new window size to AntTweakBar
-//	TwWindowSize(width, height);
-//}
 
 // Callback function called by GLUT when window size changes
 void Reshape(int width, int height)
@@ -2447,13 +1177,6 @@ double getDistance(float x, float y, float z) {
 	return distance;
 }
 
-// TODO include note in report about the benefit of RK2 but visualizing the stream ribbon for step size = 0.5 and obesrving the error for euler vs rk2
-// TODO include note in report about the origin being a fixed point for field 3 which is why the vector field won't show
-// TODO include note in report about streamlines in bunch being cut off because of the separation condition  - Lec10.pdf slide 48 condition 1 - in fact, describe all conditions
-// TODO confirm with professor regarding conditions for termination of streamlines/streamribbon computations
-// TODO confirm with professor regarding arrows
-// TODO confirm with professor regarding use of fixed points as seeds
-
 double getSeparation(float x, float y, float z) {
 	float separation = 1.;
 	// return the shortest distance of this point on this streamline from the distance on all other streamlines
@@ -2461,7 +1184,7 @@ double getSeparation(float x, float y, float z) {
 	for (int i = 0; i < (int)streamlines.size(); i++) {
 		std::vector<streampoint> stream = streamlines[i];
 		for (int j = 0; j < (int)stream.size(); j++) {
-			streampoint *p = &stream[j];
+			streampoint *p = &stream[j];	
 			float temp = edist(x, p->nextX, y, p->nextY, z, p->nextZ);
 			if (temp < separation)
 				separation = temp;
@@ -2506,6 +1229,10 @@ bool computeStreamline(float seedX, float seedY, float seedZ) {
 			point.nextY = next_y;
 			point.nextZ = next_z;
 			point.magnitude = magnitude;
+			if (abs_s_max < magnitude)
+				abs_s_max = magnitude;
+			if (abs_s_min > magnitude)
+				abs_s_min = magnitude;
 			streamline.push_back(point);
 			n_steps++;
 			vx /= magnitude;
@@ -2528,6 +1255,10 @@ bool computeStreamline(float seedX, float seedY, float seedZ) {
 			point.nextY = next_y;
 			point.nextZ = next_z;
 			point.magnitude = magnitude;
+			if (abs_s_max < magnitude)
+				abs_s_max = magnitude;
+			if (abs_s_min > magnitude)
+				abs_s_min = magnitude;
 			streamline.push_back(point);
 			n_steps++;
 			vx /= magnitude;
@@ -2599,6 +1330,10 @@ void computeStreamribbon() {
 			point1.nextY = next_y1;
 			point1.nextZ = next_z1;
 			point1.magnitude = magnitude;
+			if (abs_s_max < magnitude)
+				abs_s_max = magnitude;
+			if (abs_s_min > magnitude)
+				abs_s_min = magnitude;
 			streamr1.push_back(point1);
 			vx /= magnitude;
 			vy /= magnitude;
@@ -2614,6 +1349,10 @@ void computeStreamribbon() {
 			point2.nextY = next_y2;
 			point2.nextZ = next_z2;
 			point2.magnitude = magnitude;
+			if (abs_s_max < magnitude)
+				abs_s_max = magnitude;
+			if (abs_s_min > magnitude)
+				abs_s_min = magnitude;
 			streamr2.push_back(point2);
 			vx /= magnitude;
 			vy /= magnitude;
@@ -2640,6 +1379,10 @@ void computeStreamribbon() {
 			point1.nextY = next_y1;
 			point1.nextZ = next_z1;
 			point1.magnitude = magnitude;
+			if (abs_s_max < magnitude)
+				abs_s_max = magnitude;
+			if (abs_s_min > magnitude)
+				abs_s_min = magnitude;
 			streamr1.push_back(point1);
 			vx /= magnitude;
 			vy /= magnitude;
@@ -2668,6 +1411,10 @@ void computeStreamribbon() {
 			point2.nextY = next_y2;
 			point2.nextZ = next_z2;
 			point2.magnitude = magnitude;
+			if (abs_s_max < magnitude)
+				abs_s_max = magnitude;
+			if (abs_s_min > magnitude)
+				abs_s_min = magnitude;
 			streamr2.push_back(point2);
 			vx /= magnitude;
 			vy /= magnitude;
@@ -2699,303 +1446,9 @@ void computeStreamribbon() {
 	}
 }
 
-
-//void TW_CALL nContours(void *ClientData) { // first draws one contour based on the scalar value chosen and then draws the n contours equally spaced across the scalar range
-//	if (isPoly == 1) {
-//		isocontours.clear();
-//		computeContours(g_sprime); // draw the first contour based on the iso value chosen
-//		for (int i = 1; i < g_ncontours; i++) { // draw the rest equally spaced out
-//			float buffer = (s_max - s_min) / 1000;
-//			float sprime_i = s_min + (i * (s_max - s_min) / (g_ncontours - 1));
-//			if (sprime_i == s_min) sprime_i += buffer; // buffer to protect against extreme values where only 1 point may be present
-//			else if (sprime_i == s_max) sprime_i -= buffer;
-//			computeContours(sprime_i);
-//		}
-//	}
-//	else if (isPoly == 0) {
-//		isocontours_t.clear();
-//		computeContoursTriangles(g_sprime);
-//		for (int i = 1; i < g_ncontours; i++) {
-//			float buffer = (s_max - s_min) / 1000;
-//			float sprime_i = s_min + (i * (s_max - s_min) / (g_ncontours - 1));
-//			if (sprime_i == s_min) sprime_i += buffer; // buffer to protect against extreme values where only 1 point may be present
-//			else if (sprime_i == s_max) sprime_i -= buffer;
-//			computeContoursTriangles(sprime_i);
-//		}
-//	}
-//}
-
-//void computeLIC() {
-//	/*For each pixel
-//		Compute a streamline using the vector field image in forward and backward direction (the streamline computation is terminated when the desired number of pixels is reached).
-//		Accumulate the color values from the pixels obtained in the previous step*/
-//	streamlines.clear();
-//	for (int i = 0; i < IMG_RES; i++) {
-//		for (int j = 0; j < IMG_RES; j++) {
-//			int next_i, next_j;
-//			float x, y, vx, vy, mag;
-//			bool conditions;
-//			streamline.clear();
-//			// compute streamline in forward direction
-//			x = j + 0.5;
-//			y = i + 0.5;
-//			next_i = i;
-//			next_j = j;
-//			conditions = !(next_i < 0 || next_j < 0 || next_i >= IMG_RES || next_j >= IMG_RES);
-//			for (int l = 0; l < g_streamLength / 2 && conditions; l++) {
-//				vx = vx_min + ((vx_max - vx_min) * vec_img[next_i][next_j][0] / 255.);
-//				vy = vy_min + ((vy_max - vy_min) * vec_img[next_i][next_j][1] / 255.);
-//				mag = sqrt(pow(vx, 2) + pow(vy, 2));
-//				if (mag < 0.000001)
-//					break;
-//				vx /= mag;
-//				vy /= mag;
-//				x += vx;
-//				y += vy;
-//				next_j = (int)x;
-//				next_i = (int)y;
-//				conditions = !(next_i < 0 || next_j < 0 || next_i >= IMG_RES || next_j >= IMG_RES);
-//				if (!conditions)
-//					break;
-//				streampoint point;
-//				point.nextX = next_i;
-//				point.nextY = next_j;
-//				streamline.push_back(point);
-//			}
-//			// compute streamlines in backward direction
-//			x = j - 0.5;
-//			y = i - 0.5;
-//			next_i = i;
-//			next_j = j;
-//			conditions = !(next_i < 0 || next_j < 0 || next_i >= IMG_RES || next_j >= IMG_RES);
-//			for (int l = 0; l < g_streamLength / 2 && conditions; l++) {
-//				vx = vx_min + ((vx_max - vx_min) * vec_img[next_i][next_j][0] / 255.);
-//				vy = vy_min + ((vy_max - vy_min) * vec_img[next_i][next_j][1] / 255.);
-//				mag = sqrt(pow(vx, 2) + pow(vy, 2));
-//				if (mag < 0.000001)
-//					break;
-//				vx /= mag;
-//				vy /= mag;
-//				x -= vx;
-//				y -= vy;
-//				next_j = (int)x;
-//				next_i = (int)y;
-//				conditions = !(next_i < 0 || next_j < 0 || next_i >= IMG_RES || next_j >= IMG_RES);
-//				if (!conditions)
-//					break;
-//				streampoint point;
-//				point.nextX = next_i;
-//				point.nextY = next_j;
-//				streamline.push_back(point);
-//			}
-//			// compute the averaged color for the pixel
-//			float totalNr, totalNg, totalNb;
-//			totalNr = totalNg = totalNb = 0.;
-//			for (int k = 0; k < streamline.size(); k++) {
-//				int xp = streamline[k].nextX;
-//				int yp = streamline[k].nextY;
-//				float r, g, b;
-//				r = (float)noise_tex[xp][yp][0];
-//				g = (float)noise_tex[xp][yp][1];
-//				b = (float)noise_tex[xp][yp][2];
-//				totalNr += r;
-//				totalNg += g;
-//				totalNb += b;
-//			}
-//			lic_tex[i][j][0] = (unsigned char)(totalNr / streamline.size());
-//			lic_tex[i][j][1] = (unsigned char)(totalNg / streamline.size());
-//			lic_tex[i][j][2] = (unsigned char)(totalNb / streamline.size());
-//			streamlines.push_back(streamline);
-//		}
-//	}
-//}
-
-//void computeELIC() {
-//	// compute enhanced LIC
-//	for (int i = 0; i < streamlines.size(); i++) {
-//		float totalNr, totalNg, totalNb;
-//		totalNr = totalNg = totalNb = 0.;
-//		std::vector<streampoint> stream = streamlines[i];
-//		for (int k = 0; k < stream.size(); k++) {
-//			int xp = stream[k].nextX;
-//			int yp = stream[k].nextY;
-//			float r, g, b;
-//			r = (float)lic_tex[xp][yp][0];
-//			g = (float)lic_tex[xp][yp][1];
-//			b = (float)lic_tex[xp][yp][2];
-//			totalNr += r;
-//			totalNg += g;
-//			totalNb += b;
-//		}
-//		lic_tex_enhanced[i / IMG_RES][i % IMG_RES][0] = (unsigned char)(totalNr / stream.size());
-//		lic_tex_enhanced[i / IMG_RES][i % IMG_RES][1] = (unsigned char)(totalNg / stream.size());
-//		lic_tex_enhanced[i / IMG_RES][i % IMG_RES][2] = (unsigned char)(totalNb / stream.size());
-//	}
-//}
-
-//void updateGradient(void* clientData) {
-//	setupTwBar();
-//	color3dStruct();
-//}
-
-void TW_CALL setDVRCB(const void* value, void* clientData) {
-	g_enableDVR = *(const int *)value;
-}
-
-void TW_CALL getDVRCB(void* value, void* clientData) {
-	*(int *)value = g_enableDVR;
-}
-
-void TW_CALL setSlicesCB(const void* value, void* clientData) {
-	g_enableSlices = *(const int *)value;
-}
-
-void TW_CALL getSlicesCB(void* value, void* clientData) {
-	*(int *)value = g_enableSlices;
-}
-
-void TW_CALL setSurfaceCB(const void* value, void* clientData) {
-	g_isoSurfaces = *(const int *)value;
-}
-
-void TW_CALL getSurfaceCB(void* value, void* clientData) {
-	*(int *)value = g_isoSurfaces;
-}
-
-void TW_CALL setTextureCB(const void* value, void* clientData) {
-	g_bilinear = *(const int *)value;
-}
-
-void TW_CALL getTextureCB(void* value, void* clientData) {
-	*(int *)value = g_bilinear;
-}
-
-//void TW_CALL recomputeIsoSurface(void* clientData) {
-//	computeIsoSurfaces(g_sprime);
-//}
-
-//void setupTwBar() {
-//	if (isPoly == 2) {
-//		TwRemoveVar(bar, "Iso value");
-//		TwRemoveVar(bar, "Update Iso value / no. of contours");
-//		TwRemoveVar(bar, "controlSmin");
-//		TwRemoveVar(bar, "controlSmax");
-//		TwRemoveVar(bar, "updateMinMax");
-//		TwRemoveVar(bar, "toggleXY");
-//		TwRemoveVar(bar, "toggleYZ");
-//		TwRemoveVar(bar, "toggleXZ");
-//		TwRemoveVar(bar, "controlX");
-//		TwRemoveVar(bar, "controlY");
-//		TwRemoveVar(bar, "controlZ");
-//		TwRemoveVar(bar, "controlGradientMin");
-//		TwRemoveVar(bar, "controlGradientMax");
-//		TwRemoveVar(bar, "updateGradient");
-//		TwRemoveVar(bar, "toggleSurfaces");
-//		TwRemoveVar(bar, "No. of Iso contours");
-//		TwRemoveVar(bar, "updateTexture");
-//		TwRemoveVar(bar, "updateOpacity");
-//		TwRemoveVar(bar, "toggleDVR");
-//		TwRemoveVar(bar, "toggleSlices");
-//		// Control the range of values
-//		std::string definition = "label='Increase minimum threshold' min=" + std::to_string(0.0) + " max= " + std::to_string(s_max) + " step=" + std::to_string((s_max - s_min) / 1000.);
-//		const char* def = definition.c_str();
-//		TwAddVarRW(bar, "controlSmin", TW_TYPE_DOUBLE, &s_min, def);
-//		definition = "label='Decrease maximum threshold' min=" + std::to_string(s_min) + " max= " + std::to_string(100.0) + " step=" + std::to_string((s_max - s_min) / 1000.);
-//		def = definition.c_str();
-//		TwAddVarRW(bar, "controlSmax", TW_TYPE_DOUBLE, &s_max, def);
-//		TwAddButton(bar, "updateMinMax", updateDataRange, NULL, "label='Update Temp. min/max'");
-//		TwAddVarCB(bar, "toggleXY", TW_TYPE_BOOL32, setXYCB, getXYCB, NULL, "label='Toggle XY cutting plane'");
-//		TwAddVarCB(bar, "toggleYZ", TW_TYPE_BOOL32, setYZCB, getYZCB, NULL, "label='Toggle YZ cutting plane'");
-//		TwAddVarCB(bar, "toggleXZ", TW_TYPE_BOOL32, setXZCB, getXZCB, NULL, "label='Toggle XZ cutting plane'");
-//		TwAddVarRW(bar, "controlX", TW_TYPE_INT32, &g_Xslice, "label='Control slice along X axis' min=0 max=49 step=1");
-//		TwAddVarRW(bar, "controlY", TW_TYPE_INT32, &g_Yslice, "label='Control slice along Y axis' min=0 max=49 step=1");
-//		TwAddVarRW(bar, "controlZ", TW_TYPE_INT32, &g_Zslice, "label='Control slice along Z axis' min=0 max=49 step=1");
-//		definition = "label='Increase Min Gradient' min=" + std::to_string(0.0) + " max=" + std::to_string(g_gradientMax) + " step=" +
-//			std::to_string((g_gradientMax - g_gradientMin) / 100.);
-//		def = definition.c_str();
-//		TwAddVarRW(bar, "controlGradientMin", TW_TYPE_FLOAT, &g_gradientMin, def);
-//		definition = "label='Decrease Max Gradient' min=" + std::to_string(g_gradientMin) + " max=" + std::to_string(g_gradientAbsMax) + " step=" +
-//			std::to_string((g_gradientMax - g_gradientMin) / 100.);
-//		def = definition.c_str();
-//		TwAddVarRW(bar, "controlGradientMax", TW_TYPE_FLOAT, &g_gradientMax, def);
-//		TwAddButton(bar, "updateGradient", updateGradient, NULL, "label='Update Gradient limits'");
-//		TwAddVarCB(bar, "toggleSlices", TW_TYPE_BOOL32, setSlicesCB, getSlicesCB, NULL, "label='Display slices'");
-//		TwAddVarCB(bar, "toggleSurfaces", TW_TYPE_BOOL32, setSurfaceCB, getSurfaceCB, NULL, "label='Display IsoSurfaces'");
-//		float difference = (abs_s_max - abs_s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value or a plateau
-//		definition = "label='Adjust iso scalar value' min=" + std::to_string(abs_s_min) + " max=" + std::to_string(abs_s_max - difference) + " step=" + std::to_string(difference) +
-//			" help='Increase/decrease iso scalar value'";
-//		def = definition.c_str();
-//		g_sprime = (abs_s_max + abs_s_min) / 2;
-//		TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, def);
-//		TwAddButton(bar, "Update Iso value / no. of contours", recomputeIsoSurface, NULL, " label = 'Load new iso surface after changing value'");
-//		TwAddVarCB(bar, "toggleDVR", TW_TYPE_BOOL32, setDVRCB, getDVRCB, NULL, "label='Display 3D Volume'");
-//		TwAddVarRW(bar, "updateOpacity", TW_TYPE_FLOAT, &g_opacity, "label='Update opacity' min=0 max=1 step=0.01");
-//		TwAddVarCB(bar, "updateTexture", TW_TYPE_BOOL32, setTextureCB, getTextureCB, NULL, "label='Bilinear'");
-//	}
-//	else {
-//		TwRemoveVar(bar, "toggleXY");
-//		TwRemoveVar(bar, "toggleYZ");
-//		TwRemoveVar(bar, "toggleXZ");
-//		TwRemoveVar(bar, "controlX");
-//		TwRemoveVar(bar, "controlY");
-//		TwRemoveVar(bar, "controlZ");
-//		TwRemoveVar(bar, "controlGradientMin");
-//		TwRemoveVar(bar, "controlGradientMax");
-//		TwRemoveVar(bar, "updateGradient");
-//		TwRemoveVar(bar, "Iso value");
-//		TwRemoveVar(bar, "Update Iso value / no. of contours");
-//		TwRemoveVar(bar, "updateTexture");
-//		TwRemoveVar(bar, "updateOpacity");
-//		TwRemoveVar(bar, "toggleSurfaces");
-//		TwRemoveVar(bar, "toggleDVR");
-//		TwRemoveVar(bar, "toggleSlices");
-//		//TwAddVarRW(bar, "No. of Iso contours", TW_TYPE_UINT16, &g_ncontours, " label = 'Adjust no. of contours shown' min=1 max=256 step=1 help='Increase/decrease the no. of contours'");
-//		//float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value or a plateau
-//		//std::string definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
-//		//	" help='Increase/decrease iso scalar value'";
-//		//const char* def = definition.c_str();
-//		//g_sprime = (s_max + s_min) / 2;
-//		//g_ncontours = 1;
-//		//TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, def);
-//		//TwAddButton(bar, "Update Iso value / no. of contours", nContours, NULL, " label = 'Load new iso contour after changing value or update no. of contours' ");
-//
-//		//// draw contours
-//		//nContours(nullptr);
-//	}
-//}
-
-//void updateDataRange(void* clientData) {
-//	// Currently only works for temperature in 3DVis. Support for other objects to be added.
-//	setupTwBar();
-//	color3dStruct();
-//}
-
-void TW_CALL setXYCB(const void* value, void* clientData) {
-	g_XYplane = *(const int *)value;
-}
-
-void TW_CALL getXYCB(void* value, void* clientData) {
-	*(int *)value = g_XYplane;
-}
-
-void TW_CALL setYZCB(const void* value, void* clientData) {
-	g_YZplane = *(const int *)value;
-}
-
-void TW_CALL getYZCB(void* value, void* clientData) {
-	*(int *)value = g_YZplane;
-}
-
-void TW_CALL setXZCB(const void* value, void* clientData) {
-	g_XZplane = *(const int *)value;
-}
-
-void TW_CALL getXZCB(void* value, void* clientData) {
-	*(int *)value = g_XZplane;
-}
-
 void TW_CALL setArrowCB(const void* value, void* clientData) {
 	g_arrows = *(const int *)value;
+	g_streamribbon = g_streamlines = 0;
 }
 
 void TW_CALL getArrowCB(void* value, void* clientData) {
@@ -3004,7 +1457,8 @@ void TW_CALL getArrowCB(void* value, void* clientData) {
 
 void TW_CALL setStreamlinesCB(const void* value, void* clientData) {
 	g_streamlines = *(const int *)value;
-	g_streamribbon = 0;
+	// g_streamribbon = 0;
+	g_arrows = 0;
 }
 
 void TW_CALL getStreamlinesCB(void* value, void* clientData) {
@@ -3013,66 +1467,13 @@ void TW_CALL getStreamlinesCB(void* value, void* clientData) {
 
 void TW_CALL setStreamribbonCB(const void* value, void* clientData) {
 	g_streamribbon = *(const int *)value;
-	g_streamlines = 0;
+	// g_streamlines = 0;
+	g_arrows = 0;
 }
 
 void TW_CALL getStreamribbonCB(void* value, void* clientData) {
 	*(int *)value = g_streamribbon;
 }
-
-void TW_CALL setEnhancedCB(const void* value, void* clientData) {
-	g_enhanceLIC = *(const int *)value;
-}
-
-void TW_CALL getEnhancedCB(void* value, void* clientData) {
-	*(int *)value = g_enhanceLIC;
-}
-
-void TW_CALL getColorLICCB(void* value, void* clientData) {
-	*(int *)value = g_coloredLIC;
-}
-
-void TW_CALL setColorLICCB(const void* value, void* clientData) {
-	g_coloredLIC = *(const int *)value;
-}
-
-void TW_CALL getColorCB(void* value, void* clientData) {
-	*(int *)value = g_colorPlot;
-}
-
-void TW_CALL setColorCB(const void* value, void* clientData) {
-	g_colorPlot = *(const int *)value;
-}
-
-//void renderVecImg() {
-//	glViewport(0, 0, (GLsizei)IMG_RES, (GLsizei)IMG_RES);
-//	glMatrixMode(GL_PROJECTION);
-//	glLoadIdentity();
-//	gluOrtho2D(0, 1, 0, 1);
-//	glClear(GL_COLOR_BUFFER_BIT);
-//	glDrawBuffer(GL_BACK);
-//	int i, j;
-//	// render the mesh
-//	for (i = 0; i < poly->ntris; i++) {
-//		Triangle *temp_t = poly->tlist[i];
-//		float rgb[3];
-//		glBegin(GL_TRIANGLES);
-//		for (j = 0; j < 3; j++)
-//		{
-//			Vertex *v = temp_t->verts[j];
-//			//determine the color for this vertex based on its vector value
-//			rgb[0] = (v->vx - vx_min) / (vx_max - vx_min);
-//			rgb[1] = (v->vy - vy_min) / (vy_max - vy_min);
-//			rgb[2] = 0.;
-//			glColor3f(rgb[0], rgb[1], rgb[2]);
-//			glVertex2f(v->x, v->y);
-//		}
-//		glEnd();
-//	}
-//	// save the rendered image into the vec_img
-//	glReadBuffer(GL_BACK);
-//	glReadPixels(0, 0, IMG_RES, IMG_RES, GL_RGB, GL_UNSIGNED_BYTE, vec_img);
-//}
 
 void setVecFieldPointer() {
 	if (currentField == 1)
@@ -3085,96 +1486,29 @@ void setVecFieldPointer() {
 
 void TW_CALL loadNewObjCB(void *clientData)
 {
-	/*char object_name[128] = "Field 1";*/
-
 	switch (g_CurrentShape) {
 	case 0:
-		/*strcpy(object_name, "Field 1");*/
 		currentField = 1;
 		max_ptr = &max_sv1;
 		min_ptr = &min_sv1;
 		break;
 
 	case 1:
-		/*strcpy(object_name, "Field 2");*/
 		currentField = 2;
 		max_ptr = &max_sv2;
 		min_ptr = &min_sv2;
 		break;
 
 	case 2:
-		/*strcpy(object_name, "Field 3");*/
 		currentField = 3;
 		max_ptr = &max_sv3;
 		min_ptr = &min_sv3;
-		break;/*
-
-	case 3:
-		strcpy(object_name, "bnoise");
 		break;
-
-	case 4:
-		strcpy(object_name, "vnoise");
-		break;*/
-
-		/*case 5:
-			strcpy(object_name, "temperature1.dat");
-			break;
-
-		case 6:
-			strcpy(object_name, "temperature2.dat");
-			break;
-		case 7:
-			strcpy(object_name, "3dVis");*/
 	}
+	abs_s_max = abs_s_min = 0.;
 	setVecFieldPointer();
 	computeStreamBunch();
 	computeStreamribbon();
-
-	//if (isPoly == 0)
-		//poly->finalize();
-		//Reset();
-		//char tmp_str[512];
-		//if (strstr(object_name, "dat")) {
-		//	// load dat file and put in same data structure
-		//	sprintf(tmp_str, "./models/%s", object_name);
-		//	isPoly = 1;
-		//	Load_data_on_uniformGrids(tmp_str);
-		//	build_edge_list();
-		//	build_face_list();
-		//}
-		//else if (strstr(object_name, "3dVis")) {
-		//	isPoly = 2;
-		//	populate3dStruct();
-		//	computeGradient();
-		//	calcLimits();
-		//	color3dStruct();
-		//	computeIsoSurfaces(g_sprime);
-		//	setupTwBar();
-		//}
-		//else {
-		//	sprintf(tmp_str, "./models/%s.ply", object_name);
-		//	FILE *this_file = fopen(tmp_str, "r");
-		//	poly = new Polyhedron(this_file);
-		//	fclose(this_file);
-		//	isPoly = 0;
-		//	poly->initialize(); // initialize everything
-		//	poly->calc_bounding_sphere();
-		//	poly->calc_face_normals_and_area();
-		//	poly->average_normals();
-		//	calcLimits();
-		//	/*setColorFunction();
-		//	setExtremePointers();*/
-		//	//setupTwBar();
-		//	renderVecImg();
-		//	computeLIC();
-		//	computeELIC();
-		//}
-
-		//if (isPoly != 2) {
-		//	calcLimits(); // calc s_max and s_min for the new objects
-		//	setupTwBar();
-		//}
 
 	g_WhiteThreshold = 0.5; // reset g_WhiteThreshold
 	glutSetWindow(MainWindow);
@@ -3253,12 +1587,8 @@ void calcLimits3dVec() {
 	}
 }
 
-//void updateLIC(void* clientData) {
-//	computeLIC();
-//	computeELIC();
-//}
-
 void recompStreamline(void* clientData) {
+	abs_s_max = abs_s_min = 0.;
 	computeStreamBunch();
 	computeStreamribbon();
 }
@@ -3310,12 +1640,6 @@ void InitTwBar()
 	// Add the enum variable 'g_CurrentShape' to 'bar'
 	// (before adding an enum variable, its enum type must be declared to AntTweakBar as follow)
 	{
-		/*ShapeEV associates Shape enum values with labels that will be displayed instead of enum values
-		TwEnumVal shapeEV[NUM_SHAPES] = { { SHAPE_TEAPOT, "Teapot" },{ SHAPE_TORUS, "Torus" },{ SHAPE_CONE, "Cone" },{ BUNNY, "Bunny" } };
-		TwEnumVal shapeEV[NUM_SHAPES] = { { 0, "torus_field" },{ 1, "iceland_current_field" },{ 2, "diesel_field1" },{ 3, "distance_field1" },{ 4, "distance_field2" },
-		{ 5, "temperature1.dat" },{ 6, "temperature2.dat" }, {7, "3D Vis" } };
-		TwEnumVal shapeEV[NUM_SHAPES] = { {0, "Dipole"}, {1, "Bruno3"}, {2, "Cnoise"}, {3, "Bnoise"}, {4, "Vnoise"} };*/
-
 		TwEnumVal shapeEV[NUM_SHAPES] = { {0, "Field 1"}, {1, "Field 2"}, {2, "Field 3"} };
 
 		// Create a type for the enum shapeEV
@@ -3344,28 +1668,6 @@ void InitTwBar()
 	TwAddVarRW(bar, "WhiteThreshold", TW_TYPE_FLOAT, &g_WhiteThreshold,
 		" label = 'Adjust white threshold' min=0 max=1 step=0.01 keyIncr = 'w' keyDecr = 's' help='Increase/decrease white threshold' ");
 
-	// Control the range of values
-	//std::string definition = "label='Increase minimum threshold' min=" + std::to_string(s_min) + " max= " + std::to_string(s_max) + " step=" + std::to_string((s_max - s_min) / 1000.);
-	//const char* def = definition.c_str();
-	//TwAddVarRW(bar, "controlSmin", TW_TYPE_DOUBLE, &s_min, def);
-	//definition = "label='Decrease maximum threshold' min=" + std::to_string(s_min) + " max= " + std::to_string(s_max) + " step=" + std::to_string((s_max - s_min) / 1000.);
-	//def = definition.c_str();
-	//TwAddVarRW(bar, "controlSmax", TW_TYPE_DOUBLE, &s_max, def);
-	//TwAddButton(bar, "updateMinMax", updateDataRange, NULL, "label='Update Temp. min/max'");
-	////Add modifier for the no. of iso-contours computed and displayed
-	//TwAddVarRW(bar, "No. of Iso contours", TW_TYPE_UINT16, &g_ncontours, " label = 'Adjust no. of contours shown' min=1 max=256 step=1 help='Increase/decrease the no. of contours'");
-	////Add modifier for the iso-contour value
-	//float difference = (s_max - s_min) / 1000; // buffer to protect against minimas and maximas where there may be only a single scalar value
-	//definition = "label='Adjust iso scalar value' min=" + std::to_string(s_min + difference) + " max=" + std::to_string(s_max - difference) + " step=" + std::to_string(difference) +
-	//	" help='Increase/decrease iso scalar value'";
-	//def = definition.c_str();
-	//TwAddVarRW(bar, "Iso value", TW_TYPE_FLOAT, &g_sprime, def);
-	//TwAddButton(bar, "Update Iso value / no. of contours", nContours, NULL, " label = 'Load new iso contour after changing value or update no. of contours' ");	
-	//TwEnumVal VectorPlotEV[4] = { {0, "Magnitude"}, {1, "Angle"}, {2, "X-component"}, {3, "Y-component"} };
-	//TwType PlotType = TwDefineEnum("VectorPlotType", VectorPlotEV, 4);
-	//TwAddVarRW(bar, "VectorPlot", PlotType, &whichPlot, "label='Plot Type'");
-	////TwAddVarCB(bar, "colorLIC", TW_TYPE_BOOL32, setColorLICCB, getColorLICCB, NULL, "label='Toggle colored LIC'");
-	//TwAddVarCB(bar, "colorPlot", TW_TYPE_BOOL32, setColorCB, getColorCB, NULL, "label='Toggle Color Plots'");
 	TwAddVarCB(bar, "toggleArrows", TW_TYPE_BOOL32, setArrowCB, getArrowCB, NULL, "label='Toggle Arrows'");
 	TwAddVarCB(bar, "toggleStreamlines", TW_TYPE_BOOL32, setStreamlinesCB, getStreamlinesCB, NULL, "label='Toggle Streamlines'");
 	TwAddVarCB(bar, "toggleStreamribbon", TW_TYPE_BOOL32, setStreamribbonCB, getStreamribbonCB, NULL, "label='Toggle Streamribbon'");
@@ -3373,15 +1675,12 @@ void InitTwBar()
 	TwAddVarRW(bar, "moveProbeX", TW_TYPE_FLOAT, &g_probeX, "label='Change X coordinate' min=-1.0 max=1.0 step=0.01");
 	TwAddVarRW(bar, "moveProbeY", TW_TYPE_FLOAT, &g_probeY, "label='Change Y coordinate' min=-1.0 max=1.0 step=0.01");
 	TwAddVarRW(bar, "moveProbeZ", TW_TYPE_FLOAT, &g_probeZ, "label='Change Z coordinate' min=-1.0 max=1.0 step=0.01");
-	TwEnumVal Integrators[2] = { {0, "Euler"}, {1, "Runga-Kutta Second Order"} };
+	TwEnumVal Integrators[2] = { {0, "Euler"}, {1, "Runge-Kutta Second Order"} };
 	TwType Integrator = TwDefineEnum("Integrators", Integrators, 2);
 	TwAddVarRW(bar, "changeIntegrator", Integrator, &whichIntegrator, "label='Change integration method'");
 	TwAddVarRW(bar, "changeDt", TW_TYPE_FLOAT, &g_step, "label='Change step size' min=0.01 max=0.5 step=0.01");
 	TwAddVarRW(bar, "changeSepDist", TW_TYPE_FLOAT, &g_linedist, "label='Change dist. between lines' min=0.1 max=0.5 step=0.01");
 	TwAddButton(bar, "updateProbe", recompStreamline, NULL, "label='Update Streamline/Streamribbon'");
-	//TwAddVarCB(bar, "toggleEnhancedLIC", TW_TYPE_BOOL32, setEnhancedCB, getEnhancedCB, NULL, "label='Toggle Enhanced LIC'");
-	//TwAddVarCB(bar, "toggleColoredLIC", TW_TYPE_BOOL32, setColorLICCB, getColorLICCB, NULL, "label='Toggle Colored LIC'");
-	//TwAddButton(bar, "updateLIC", updateLIC, NULL, "label='Recompute LIC'");
 }
 
 // Main
@@ -3432,24 +1731,6 @@ int main(int argc, char *argv[])
 	setVecFieldPointer();
 	computeStreamBunch();
 	computeStreamribbon();
-
-	// setExtremePointers();
-	// Load the model and data here
-	//FILE *this_file = fopen("./models/dipole.ply", "r");
-	//poly = new Polyhedron(this_file);
-	//fclose(this_file);
-	//poly->initialize(); // initialize everything
-	//poly->calc_bounding_sphere();
-	//poly->calc_face_normals_and_area();
-	//poly->average_normals();
-	//calcLimits(); // calculate limits for the default figure
-	//setColorFunction();
-	//setExtremePointers();
-	//gen_noise_tex();
-	//renderVecImg();
-	//computeLIC();
-	//computeELIC();
-	// nContours(nullptr);
 
 	// Build a display list for the axes
 
