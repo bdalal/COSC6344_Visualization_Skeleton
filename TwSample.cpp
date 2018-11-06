@@ -2211,8 +2211,6 @@ void draw_streamlines() {
 	}
 }
 
-// TODO: color streamline
-
 void draw_streamribbon() {
 	float rgb[3];
 	for (int i = 0; i < (int) streamr1.size() - 1; i++) {
@@ -2340,18 +2338,18 @@ void Display(void)
 	glutPostRedisplay();
 }
 
-void ReshapeNew(int width, int height) {
-	// Set OpenGL viewport and camera
-	glViewport(0, 0, (GLsizei)width, (GLsizei)height);
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	gluOrtho2D(0, 1, 0, 1);
-	glClearColor(0, 0, 0, 1);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	// Send the new window size to AntTweakBar
-	TwWindowSize(width, height);
-}
+//void ReshapeNew(int width, int height) {
+//	// Set OpenGL viewport and camera
+//	glViewport(0, 0, (GLsizei)width, (GLsizei)height);
+//	glMatrixMode(GL_PROJECTION);
+//	glLoadIdentity();
+//	gluOrtho2D(0, 1, 0, 1);
+//	glClearColor(0, 0, 0, 1);
+//	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+//
+//	// Send the new window size to AntTweakBar
+//	TwWindowSize(width, height);
+//}
 
 // Callback function called by GLUT when window size changes
 void Reshape(int width, int height)
@@ -2452,6 +2450,9 @@ double getDistance(float x, float y, float z) {
 // TODO include note in report about the benefit of RK2 but visualizing the stream ribbon for step size = 0.5 and obesrving the error for euler vs rk2
 // TODO include note in report about the origin being a fixed point for field 3 which is why the vector field won't show
 // TODO include note in report about streamlines in bunch being cut off because of the separation condition  - Lec10.pdf slide 48 condition 1 - in fact, describe all conditions
+// TODO confirm with professor regarding conditions for termination of streamlines/streamribbon computations
+// TODO confirm with professor regarding arrows
+// TODO confirm with professor regarding use of fixed points as seeds
 
 double getSeparation(float x, float y, float z) {
 	float separation = 1.;
@@ -2476,13 +2477,13 @@ bool checkConditions(float next_x, float next_y, float next_z, int n_steps, bool
 	// next value is not a fixed point
 	condition2 = getMagnitude(next_x, next_y, next_z) > 0.000001;
 	// streamline isn't curving back on itself - check if the euclidean distance is greater than threshold
-	condition3 = getDistance(next_x, next_y, next_z) > 0.001;
+	// condition3 = getDistance(next_x, next_y, next_z) > 0.001;
 	// streamline length in steps has been reached
 	condition4 = n_steps <= g_streamLength;
 	// streamline is too close to other streamlines - don't need to check this for streamribbons
-	condition5 = getSeparation(next_x, next_y, next_z) > 0.05 || computeRibbon;
+	// condition5 = getSeparation(next_x, next_y, next_z) > 0.05 || computeRibbon;
 	// check if all conditions are satisfied
-	conditions = condition1 && condition2 && condition3 && condition4 && condition5;
+	conditions = condition1 && condition2 && condition4;
 	
 	return conditions;
 }
