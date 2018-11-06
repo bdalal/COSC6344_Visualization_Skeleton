@@ -304,6 +304,7 @@ unsigned char lic_tex_enhanced[IMG_RES][IMG_RES][3];
 
 typedef struct streampoint {
 	float nextX, nextY, nextZ;
+	float magnitude;
 };
 
 std::vector<streampoint> streamline;
@@ -374,8 +375,8 @@ void Arrow(float tail[3], float head[3])
 	/* set size of wings and turn w into a unit vector: */
 	d = WINGS * unit(w, w);
 	/* draw the shaft of the arrow: */
-	glPushMatrix();
-	glTranslatef(head[0], head[1], head[2]);
+	//glPushMatrix();
+	// glTranslatef(head[0], head[1], head[2]);
 	// glScalef(0.05, 0.05, 0.05);
 	glBegin(GL_LINE_STRIP);
 	glVertex3fv(tail);
@@ -442,7 +443,7 @@ void Arrow(float tail[3], float head[3])
 		glVertex3f(x, y, z);
 		glEnd();
 	}
-	glPopMatrix();
+	//glPopMatrix();
 	/* done: */
 }
 
@@ -1377,11 +1378,27 @@ void draw_3d_arrows_field1() {
 		for (int j = 0; j < NY3d; j++) {
 			for (int k = 0; k < NZ3d; k++) {
 				vecNode *node = &vec_field1[i][j][k];
-				// TODO normalize vectors before passing to the Arrow function
-				float arrow_head[3] = { node->x, node->y, node->z };
-				float arrow_direct[3] = { node->vx, node->vy, node->vz };
-				// draw_3d_arrows(arrow_head, arrow_direct, node->magnitude);
+				glPushMatrix();
+				float x = node->x;
+				float y = node->y;
+				float z = node->z;
+				float vx = node->vx;
+				float vy = node->vy;
+				float vz = node->vz;
+				float magnitude = node->magnitude;
+				vx /= magnitude;
+				vy /= magnitude;
+				vz /= magnitude;
+				float arrow_head[3] = { x, y, z };
+				float arrow_direct[3] = { vx, vy, vz };
+				float rgb[3];
+				colorFunction(magnitude, rgb);
+				glColor3fv(rgb);
+				glTranslatef(x, y, z);
+				glScalef(0.1, 0.1, 0.1);
 				Arrow(arrow_head, arrow_direct);
+				glScalef(1., 1., 1.);
+				glPopMatrix();
 			}
 		}
 	}
@@ -1392,10 +1409,26 @@ void draw_3d_arrows_field2() {
 		for (int j = 0; j < NY3d; j++) {
 			for (int k = 0; k < NZ3d; k++) {
 				vecNode *node = &vec_field2[i][j][k];
-				float arrow_head[3] = { node->x, node->y, node->z };
-				float arrow_direct[3] = { node->vx, node->vy, node->vz };
-				// draw_3d_arrows(arrow_head, arrow_direct, node->magnitude);
+				glPushMatrix();
+				float x = node->x;
+				float y = node->y;
+				float z = node->z;
+				float vx = node->vx;
+				float vy = node->vy;
+				float vz = node->vz;
+				float magnitude = node->magnitude;
+				vx /= magnitude;
+				vy /= magnitude;
+				vz /= magnitude;
+				float arrow_head[3] = { x, y, z };
+				float arrow_direct[3] = { vx, vy, vz };
+				float rgb[3];
+				colorFunction(magnitude, rgb);
+				glColor3fv(rgb);
+				glTranslatef(x, y, z);
+				glScalef(0.1, 0.1, 0.1);
 				Arrow(arrow_head, arrow_direct);
+				glPopMatrix();
 			}
 		}
 	}
@@ -1406,10 +1439,26 @@ void draw_3d_arrows_field3() {
 		for (int j = 0; j < NY3d; j++) {
 			for (int k = 0; k < NZ3d; k++) {
 				vecNode *node = &vec_field3[i][j][k];
-				float arrow_head[3] = { node->x, node->y, node->z };
-				float arrow_direct[3] = { node->vx, node->vy, node->vz };
-				// draw_3d_arrows(arrow_head, arrow_direct, node->magnitude);
+				glPushMatrix();
+				float x = node->x;
+				float y = node->y;
+				float z = node->z;
+				float vx = node->vx;
+				float vy = node->vy;
+				float vz = node->vz;
+				float magnitude = node->magnitude;
+				vx /= magnitude;
+				vy /= magnitude;
+				vz /= magnitude;
+				float arrow_head[3] = { x, y, z };
+				float arrow_direct[3] = { vx, vy, vz };
+				float rgb[3];
+				colorFunction(magnitude, rgb);
+				glColor3fv(rgb);
+				glTranslatef(x, y, z);
+				glScalef(0.1, 0.1, 0.1);
 				Arrow(arrow_head, arrow_direct);
+				glPopMatrix();
 			}
 		}
 	}
@@ -2148,11 +2197,14 @@ void setColorFunction() {
 
 
 void draw_streamlines() {
+	float rgb[3];
 	for (int i = 0; i < (int) streamlines.size(); i++) {
 		std::vector<streampoint> streamline = streamlines[i];
 		glBegin(GL_LINE_STRIP);
 		for (int j = 0; j < streamline.size(); j++) {
 			streampoint *point = &streamline[j];
+			colorFunction(point->magnitude, rgb);
+			glColor3fv(rgb);
 			glVertex3f(point->nextX, point->nextY, point->nextZ);
 		}
 		glEnd();
@@ -2162,15 +2214,24 @@ void draw_streamlines() {
 // TODO: color streamline
 
 void draw_streamribbon() {
+	float rgb[3];
 	for (int i = 0; i < (int) streamr1.size() - 1; i++) {
 		glBegin(GL_QUADS);
 		streampoint *p1 = &streamr1[i];
 		streampoint *p2 = &streamr2[i];
+		colorFunction(p1->magnitude, rgb);
+		glColor3fv(rgb);
 		glVertex3f(p1->nextX, p1->nextY, p1->nextZ);
+		colorFunction(p2->magnitude, rgb);
+		glColor3fv(rgb);
 		glVertex3f(p2->nextX, p2->nextY, p2->nextZ);
 		++p1;
 		++p2;
+		colorFunction(p2->magnitude, rgb);
+		glColor3fv(rgb);
 		glVertex3f(p2->nextX, p2->nextY, p2->nextZ);
+		colorFunction(p1->magnitude, rgb);
+		glColor3fv(rgb);
 		glVertex3f(p1->nextX, p1->nextY, p1->nextZ);
 		glEnd();
 	}
@@ -2228,7 +2289,7 @@ void Display(void)
 
 	//glCallList(g_CurrentShape);
 
-	//setColorFunction();
+	setColorFunction();
 	//setExtremePointers();
 	//// Draw the 3D object
 	//if (isPoly == 1) drawSquareObject();
@@ -2439,12 +2500,13 @@ bool computeStreamline(float seedX, float seedY, float seedZ) {
 		// Euler
 		// Sn = Sn-1 + v(Sn-1).dt
 		while (checkConditions(next_x, next_y, next_z, n_steps, false)) {
+			vectorFunction(next_x, next_y, next_z, vx, vy, vz, magnitude);
 			point.nextX = next_x;
 			point.nextY = next_y;
 			point.nextZ = next_z;
+			point.magnitude = magnitude;
 			streamline.push_back(point);
 			n_steps++;
-			vectorFunction(next_x, next_y, next_z, vx, vy, vz, magnitude);
 			vx /= magnitude;
 			vy /= magnitude;
 			vz /= magnitude;
@@ -2460,12 +2522,13 @@ bool computeStreamline(float seedX, float seedY, float seedZ) {
 		// RK - 2
 		float vx2, vy2, vz2, vxavg, vyavg, vzavg;
 		while (checkConditions(next_x, next_y, next_z, n_steps, false)) {
+			vectorFunction(next_x, next_y, next_z, vx, vy, vz, magnitude);
 			point.nextX = next_x;
 			point.nextY = next_y;
 			point.nextZ = next_z;
+			point.magnitude = magnitude;
 			streamline.push_back(point);
 			n_steps++;
-			vectorFunction(next_x, next_y, next_z, vx, vy, vz, magnitude);
 			vx /= magnitude;
 			vy /= magnitude;
 			vz /= magnitude;
@@ -2529,16 +2592,13 @@ void computeStreamribbon() {
 		// Euler
 		// Sn = Sn-1 + v(Sn-1).dt
 		while (checkConditions(next_x1, next_y1, next_z1, n_steps, true) && checkConditions(next_x2, next_y2, next_z2, n_steps, true)) {
+			n_steps++;
+			vectorFunction(next_x1, next_y1, next_z1, vx, vy, vz, magnitude);
 			point1.nextX = next_x1;
 			point1.nextY = next_y1;
 			point1.nextZ = next_z1;
+			point1.magnitude = magnitude;
 			streamr1.push_back(point1);
-			point2.nextX = next_x2;
-			point2.nextY = next_y2;
-			point2.nextZ = next_z2;
-			streamr2.push_back(point2);
-			n_steps++;
-			vectorFunction(next_x1, next_y1, next_z1, vx, vy, vz, magnitude);
 			vx /= magnitude;
 			vy /= magnitude;
 			vz /= magnitude;
@@ -2549,6 +2609,11 @@ void computeStreamribbon() {
 			next_y1 += vy;
 			next_z1 += vz;
 			vectorFunction(next_x2, next_y2, next_z2, vx, vy, vz, magnitude);
+			point2.nextX = next_x2;
+			point2.nextY = next_y2;
+			point2.nextZ = next_z2;
+			point2.magnitude = magnitude;
+			streamr2.push_back(point2);
 			vx /= magnitude;
 			vy /= magnitude;
 			vz /= magnitude;
@@ -2568,16 +2633,13 @@ void computeStreamribbon() {
 		// RK - 2 
 		float vx21, vy21, vz21, vx22, vy22, vz22, vxavg, vyavg, vzavg;
 		while (checkConditions(next_x1, next_y1, next_z1, n_steps, true) && checkConditions(next_x2, next_y2, next_z2, n_steps, true)) {
+			n_steps++;
+			vectorFunction(next_x1, next_y1, next_z1, vx, vy, vz, magnitude);
 			point1.nextX = next_x1;
 			point1.nextY = next_y1;
 			point1.nextZ = next_z1;
+			point1.magnitude = magnitude;
 			streamr1.push_back(point1);
-			point2.nextX = next_x2;
-			point2.nextY = next_y2;
-			point2.nextZ = next_z2;
-			streamr2.push_back(point2);
-			n_steps++;
-			vectorFunction(next_x1, next_y1, next_z1, vx, vy, vz, magnitude);
 			vx /= magnitude;
 			vy /= magnitude;
 			vz /= magnitude;
@@ -2601,6 +2663,11 @@ void computeStreamribbon() {
 			next_y1 += vyavg - vy;
 			next_z1 += vzavg - vz;
 			vectorFunction(next_x2, next_y2, next_z2, vx, vy, vz, magnitude);
+			point2.nextX = next_x2;
+			point2.nextY = next_y2;
+			point2.nextZ = next_z2;
+			point2.magnitude = magnitude;
+			streamr2.push_back(point2);
 			vx /= magnitude;
 			vy /= magnitude;
 			vz /= magnitude;
