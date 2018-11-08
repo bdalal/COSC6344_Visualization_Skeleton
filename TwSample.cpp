@@ -47,7 +47,7 @@ int MainWindow;
 // This example displays one of the following shapes
 //typedef enum { SHAPE_TEAPOT=1, SHAPE_TORUS, SHAPE_CONE, BUNNY } Shape;
 
-#define NUM_SHAPES 5
+#define NUM_SHAPES 4
 //Shape g_CurrentShape = SHAPE_TORUS;
 int g_CurrentShape = 0;
 
@@ -83,8 +83,10 @@ const GLfloat Colors[7][3] =
 	{ 1., 0., 1. },		// magenta
 	{ 1., 1., 1. },		// white
 };
-#define NUM_COLORS 12
+#define NUM_COLORS 5
 int whichColor = 0;
+
+void(*colorFunction)(float, float[]); // pointer to color function of choice
 
 // the stroke characters 'X' 'Y' 'Z' :
 
@@ -540,9 +542,9 @@ void HeatMap(float s, float rgb[3]) {
 	// by 3 to scale it back to the normal color range of 0 - 1. 
 	// If a color lies in the 2nd part, then we maximize red and carryforward the spillover to set green.
 	// We do similarly for blue
-	 rgb[0] = min((3 * max(t, 0)), 1); // 3 * (min(t, 1/3))
-	 rgb[1] = min((3 * max(t-(1./3.), 0)), 1); // 3 * (min(t-1/3, 1/3))
-	 rgb[2] = min((3 * max(t-(2./3.), 0)), 1); // 3 * (min(t-2/3, 1/3))
+	rgb[0] = min((3 * max(t, 0)), 1); // 3 * (min(t, 1/3))
+	rgb[1] = min((3 * max(t - (1. / 3.), 0)), 1); // 3 * (min(t-1/3, 1/3))
+	rgb[2] = min((3 * max(t - (2. / 3.), 0)), 1); // 3 * (min(t-2/3, 1/3))
 }
 
 //TODO Interface to move data range
@@ -589,6 +591,26 @@ void calcLimits() {
 	}
 	/*s_mid = (s_min + s_max) / 2;*/
 	/*g_WhiteThreshold = s_mid;*/
+}
+
+void setColorFunction() {
+	switch (whichColor) {
+	case 0:
+		colorFunction = &Rainbow_color;
+		break;
+	case 1:
+		colorFunction = &BWR_Divergent;
+		break;
+	case 2:
+		colorFunction = &HeatMap;
+		break;
+	case 3:
+		colorFunction = &Discrete;
+		break;
+	case 4:
+		colorFunction = &NonLinear;
+		break;
+	}
 }
 
 // Callback function called by GLUT to render screen
@@ -644,117 +666,25 @@ void Display(void)
 	// The draw function
 	//glCallList(g_CurrentShape);
 
+	setColorFunction();
+
 	// Draw the 3D object
-	if (whichColor < 7) { // Standard AntTweakBar colors
-		glColor3fv(Colors[whichColor]); // color the object
-		for (int i = 0; i < poly->ntris; i++) {
-			Triangle *temp_t = poly->tlist[i];
-			glBegin(GL_POLYGON);
-			for (int j = 0; j < 3; j++) {
-				Vertex *temp_v = temp_t->verts[j];
-				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-				float x = temp_v->x;
-				float y = temp_v->y;
-				float z = temp_v->z;
-				glVertex3d(x, y, z);
-			}
-			glEnd();
+	for (int i = 0; i < poly->ntris; i++) {
+		Triangle *temp_t = poly->tlist[i];
+		glBegin(GL_POLYGON);
+		for (int j = 0; j < 3; j++) {
+			Vertex *temp_v = temp_t->verts[j];
+			glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
+			float rgb[3];
+			float x = temp_v->x;
+			float y = temp_v->y;
+			float z = temp_v->z;
+			float s = temp_v->s;
+			Rainbow_color(s, rgb);
+			glColor3f(rgb[0], rgb[1], rgb[2]);
+			glVertex3d(x, y, z);
 		}
-	}
-	if (whichColor == 7) { // Rainbow scheme
-		for (int i = 0; i < poly->ntris; i++) {
-			Triangle *temp_t = poly->tlist[i];
-			glBegin(GL_POLYGON);
-			for (int j = 0; j < 3; j++) {
-				Vertex *temp_v = temp_t->verts[j];
-				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-				float rgb[3];
-				float x = temp_v->x;
-				float y = temp_v->y;
-				float z = temp_v->z;
-				float s = temp_v->s;
-				Rainbow_color(s, rgb);
-				glColor3f(rgb[0], rgb[1], rgb[2]);
-				glVertex3d(x, y, z);
-			}
-			glEnd();
-		}
-	}
-	if (whichColor == 8) { //  BWR Divergent scheme
-		for (int i = 0; i < poly->ntris; i++) {
-			Triangle *temp_t = poly->tlist[i];
-			glBegin(GL_POLYGON);
-			for (int j = 0; j < 3; j++) {
-				Vertex *temp_v = temp_t->verts[j];
-				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-				float rgb[3];
-				float x = temp_v->x;
-				float y = temp_v->y;
-				float z = temp_v->z;
-				float s = temp_v->s;
-				BWR_Divergent(s, rgb);
-				glColor3f(rgb[0], rgb[1], rgb[2]);
-				glVertex3d(x, y, z);
-			}
-			glEnd();
-		}
-	}
-	if (whichColor == 9) { // HeatMap scheme
-		for (int i = 0; i < poly->ntris; i++) {
-			Triangle *temp_t = poly->tlist[i];
-			glBegin(GL_POLYGON);
-			for (int j = 0; j < 3; j++) {
-				Vertex *temp_v = temp_t->verts[j];
-				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-				float rgb[3];
-				float x = temp_v->x;
-				float y = temp_v->y;
-				float z = temp_v->z;
-				float s = temp_v->s;
-				HeatMap(s, rgb);
-				glColor3f(rgb[0], rgb[1], rgb[2]);
-				glVertex3d(x, y, z);
-			}
-			glEnd();
-		}
-	}
-	if (whichColor == 10) { // Discrete scheme
-		for (int i = 0; i < poly->ntris; i++) {
-			Triangle *temp_t = poly->tlist[i];
-			glBegin(GL_POLYGON);
-			for (int j = 0; j < 3; j++) {
-				Vertex *temp_v = temp_t->verts[j];
-				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-				float rgb[3];
-				float x = temp_v->x;
-				float y = temp_v->y;
-				float z = temp_v->z;
-				float s = temp_v->s;
-				Discrete(s, rgb);
-				glColor3f(rgb[0], rgb[1], rgb[2]);
-				glVertex3d(x, y, z);
-			}
-			glEnd();
-		}
-	}
-	if (whichColor == 11) { // Non-linear scheme
-		for (int i = 0; i < poly->ntris; i++) {
-			Triangle *temp_t = poly->tlist[i];
-			glBegin(GL_POLYGON);
-			for (int j = 0; j < 3; j++) {
-				Vertex *temp_v = temp_t->verts[j];
-				glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-				float rgb[3];
-				float x = temp_v->x;
-				float y = temp_v->y;
-				float z = temp_v->z;
-				float s = temp_v->s;
-				NonLinear(s, rgb);
-				glColor3f(rgb[0], rgb[1], rgb[2]);
-				glVertex3d(x, y, z);
-			}
-			glEnd();
-		}
+		glEnd();
 	}
 
 	// Draw axes
@@ -851,27 +781,23 @@ void TW_CALL GetAxesCB(void *value, void *clientData)
 
 void TW_CALL loadNewObjCB(void *clientData)
 {
-	char object_name[128] = "torus_field";
+	char object_name[128] = "Bunny";
 
 	switch (g_CurrentShape) {
 	case 0:
-		strcpy(object_name, "torus_field");
+		strcpy(object_name, "bunny1");
 		break;
 
 	case 1:
-		strcpy(object_name, "iceland_current_field");
+		strcpy(object_name, "sphere1");
 		break;
 
 	case 2:
-		strcpy(object_name, "diesel_field1");
+		strcpy(object_name, "torus1");
 		break;
 
 	case 3:
-		strcpy(object_name, "distance_field1");
-		break;
-
-	case 4:
-		strcpy(object_name, "distance_field2");
+		strcpy(object_name, "torus2");
 		break;
 	}
 
@@ -886,13 +812,13 @@ void TW_CALL loadNewObjCB(void *clientData)
 	FILE *this_file = fopen(tmp_str, "r");
 	poly = new Polyhedron(this_file);
 	fclose(this_file);
-	
+
 	poly->initialize(); // initialize everything
 
 	// Q 3.3a	
 	calcLimits(); // calc s_max and s_min for the new objects
 	g_WhiteThreshold = 0.5; // reset g_WhiteThreshold
-	
+
 	poly->calc_bounding_sphere();
 	poly->calc_face_normals_and_area();
 	poly->average_normals();
@@ -951,8 +877,8 @@ void InitTwBar(TwBar *bar)
 	{
 		// ShapeEV associates Shape enum values with labels that will be displayed instead of enum values
 		//TwEnumVal shapeEV[NUM_SHAPES] = { { SHAPE_TEAPOT, "Teapot" },{ SHAPE_TORUS, "Torus" },{ SHAPE_CONE, "Cone" },{ BUNNY, "Bunny" } };
-		
-		TwEnumVal shapeEV[NUM_SHAPES] = { { 0, "torus_field" },{ 1, "iceland_current_field" },{ 2, "diesel_field1" },{ 3, "distance_field1" },{ 4, "distance_field2" } };
+
+		TwEnumVal shapeEV[NUM_SHAPES] = { { 0, "Bunny" },{ 1, "Torus - 1" },{ 2, "Torus - 2" },{ 3, "Sphere" } };
 
 		// Create a type for the enum shapeEV
 		TwType shapeType = TwDefineEnum("ShapeType", shapeEV, NUM_SHAPES);
@@ -968,8 +894,7 @@ void InitTwBar(TwBar *bar)
 
 	// Add the enum variable 'whichColor' to 'bar' 
 	{
-		TwEnumVal ColorEV[NUM_COLORS] = { {0, "red"}, {1, "yellow"}, {2, "green"}, {3, "cyan"}, {4, "blue"}, {5, "magenta"},  {6, "white"}, {7, "Rainbow"}, {8, "Blue-White-Red"}, 
-		{9, "Heat map"}, {10, "Discrete"}, {11, "NonLinear - Extremes"} };
+		TwEnumVal ColorEV[NUM_COLORS] = { {0, "Rainbow"}, {1, "Blue-White-Red"}, {2, "Heat map"}, {3, "Discrete"}, {4, "NonLinear - Extremes"} };
 		// Create a type for the enum ColorEV
 		TwType ColorType = TwDefineEnum("ColoType", ColorEV, NUM_COLORS);
 
@@ -979,7 +904,7 @@ void InitTwBar(TwBar *bar)
 
 	// calculate white threshold for the default object - torus
 
-	TwAddVarRW(bar, "WhiteThreshold", TW_TYPE_FLOAT, &g_WhiteThreshold, 
+	TwAddVarRW(bar, "WhiteThreshold", TW_TYPE_FLOAT, &g_WhiteThreshold,
 		" label = 'Adjust white threshold' min=0 max=1 step=0.01 keyIncr = 'w' keyDecr = 's' help='Increase/decrease white threshold' ");
 }
 
@@ -1000,7 +925,7 @@ int main(int argc, char *argv[])
 	// probably no noticeable difference between single and double
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
 	glutInitWindowSize(1024, 768);
-	MainWindow = glutCreateWindow("Assignment 1 – Binoy Dalal");
+	MainWindow = glutCreateWindow("Final Project – IBFV – Binoy Dalal (1794070)");
 	glutCreateMenu(NULL);
 
 	// Set GLUT callbacks
@@ -1028,13 +953,13 @@ int main(int argc, char *argv[])
 
 
 	// Load the model and data here
-	FILE *this_file = fopen("./models/torus_field.ply", "r");
+	FILE *this_file = fopen("./models/bunny1.ply", "r");
 	poly = new Polyhedron(this_file);
 	fclose(this_file);
 	poly->initialize(); // initialize everything
 
 	calcLimits(); // calculate s_max and s_min for the default figure
-
+	setColorFunction();
 	poly->calc_bounding_sphere();
 	poly->calc_face_normals_and_area();
 	poly->average_normals();
