@@ -34,6 +34,8 @@ public:
 	int angle_deficit;
 	float nx, ny, nz;
 	int index;
+	float magnitude;
+	double tx[2];
 
 	int ntris;
 	Triangle **tris;

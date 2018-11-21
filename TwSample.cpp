@@ -22,9 +22,9 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+
+#define _USE_MATH_DEFINES
 #include <math.h>
-#include <string>
-#include <sstream>
 
 #if defined(_WIN32) || defined(_WIN64)
 //  MiniGLUT.h is provided to avoid the need of having GLUT installed to 
@@ -150,8 +150,32 @@ const GLfloat AXES_WIDTH = { 3. };
 GLuint	BoxList = 100;		// object display list
 GLuint	AxesList = 101;		// list to hold the axes
 
-int g_Axes = 1;   // Toggle Axes
+int g_Axes = 0;   // Toggle Axes
 int g_Box = 0;    // Toggle Box
+
+const int IMG_RES_NOISE = 800; // resolution of the noise images
+unsigned char noise_tex[IMG_RES_NOISE][IMG_RES_NOISE][4];
+
+const int IMG_RES = 800; // resolution of image for IBFV
+unsigned char ft[IMG_RES][IMG_RES][4]; // texture for Ft image in first step of algo.
+unsigned char f[IMG_RES][IMG_RES][4]; // texture for F image in second step of algo.
+
+const int N_Noise = 32; // no. of noise images
+
+float alpha = (0.12 * 255); // Blending factor for noise images
+
+int g_color = 0;
+
+// TODO - make configurable
+float g_step = 0.1;
+
+int frame_counter = 0; // counter for noise images
+
+float dmax = 0.9 / IMG_RES; // limit texture warping
+
+double tmax = IMG_RES / (0.24 * IMG_RES_NOISE);
+
+float objXmat[16]; // to store the model view matrix for transforming the texture
 
 #include "Skeleton.h"
 Polyhedron *poly = NULL;
@@ -214,8 +238,7 @@ void MultiplyQuaternions(const float *q1, const float *q2, float *qout)
 
 // Color space conversion function
 // HSV to RGB
-void
-HsvRgb(float hsv[3], float rgb[3])
+void HsvRgb(float hsv[3], float rgb[3])
 {
 	float h, s, v;			// hue, sat, value
 	float r, g, b;			// red, green, blue
@@ -461,6 +484,8 @@ InitAxesLists(void)
 	glEndList();
 }
 
+// TODO: angle deficit is probably not the correct property to visualize color. Find out which is the correct one.
+
 void Rainbow_color(float s, float rgb[3])
 {
 	float t = (s - s_min) / (s_max - s_min);
@@ -476,37 +501,6 @@ void Rainbow_color(float s, float rgb[3])
 	// Call the HSV to RGB conversion function
 	HsvRgb(hsv, rgb);
 }
-
-//Q 3.1
-//void BWR_Divergent(float s, float rgb[3]) {
-//	// float s_mid = (s_max + s_min) / 2;
-//	float t;
-//	bool blue;
-//	if (s >= s_min && s <= s_mid) {
-//		t = (s - s_min) / (s_mid - s_min);
-//		blue = true;
-//	}
-//	else if (s > s_mid && s <= s_max) {
-//		t = (s - s_mid) / (s_max - s_mid);
-//		blue = false;
-//	}
-//	else {
-//		t = -1.;
-//	}
-//	if (t < 0 || t > 1) {
-//		rgb[0] = rgb[1] = rgb[2] = 0.;
-//		return;
-//	}
-//	float hsv[4];
-//	hsv[2] = hsv[3] = 1.; // set value and alpha channel to 1
-//	hsv[1] = t; // saturation will determine the intensity of the color
-//	hsv[0] = 0.; // set hue to red by default
-//	if (blue) {
-//		hsv[1] = 1 - t; // blue goes from darkest to lightest
-//		hsv[0] = 240; // set hue to 240
-//	}
-//	HsvRgb(hsv, rgb);
-//}
 
 void BWR_Divergent(float s, float rgb[3]) {
 	float t = (s - s_min) / (s_max - s_min);
@@ -550,7 +544,6 @@ void HeatMap(float s, float rgb[3]) {
 //TODO Interface to move data range
 
 
-// Q 3.2
 void Discrete(float s, float rgb[3]) {
 	int t = floor((s - s_min) / (s_max - s_min) * 10);
 	if (t >= 0 && t <= 5) {
@@ -566,7 +559,6 @@ void Discrete(float s, float rgb[3]) {
 	rgb[0] = rgb[1] = rgb[2] = 1.;
 }
 
-// Q 3.3b
 void NonLinear(float s, float rgb[3]) {
 	float t = (sqrt(s) - sqrt(s_min)) / (sqrt(s_max) - sqrt(s_min));
 	float hsv[4];
@@ -575,22 +567,19 @@ void NonLinear(float s, float rgb[3]) {
 	HsvRgb(hsv, rgb);
 }
 
-// Q 3.3a
 void calcLimits() {
-	s_max = s_min = poly->tlist[0]->verts[0]->s;
+	s_max = s_min = poly->tlist[0]->verts[0]->magnitude;
 	for (int i = 0; i < poly->ntris; i++) {
 		Triangle *temp_t = poly->tlist[i];
 		for (int j = 0; j < 3; j++) {
 			Vertex *temp_v = temp_t->verts[j];
-			float s = temp_v->s;
+			float s = temp_v->magnitude;
 			if (s > s_max)
 				s_max = s;
 			if (s < s_min)
 				s_min = s;
 		}
 	}
-	/*s_mid = (s_min + s_max) / 2;*/
-	/*g_WhiteThreshold = s_mid;*/
 }
 
 void setColorFunction() {
@@ -613,6 +602,126 @@ void setColorFunction() {
 	}
 }
 
+void getDistortedVertices(Vertex* temp_v, double &px, double &py) {
+	float p[4], pr[4];
+	float x = temp_v->x;
+	float y = temp_v->y;
+	float z = temp_v->z;
+	float vx = temp_v->nx / temp_v->magnitude;
+	float vy = temp_v->ny / temp_v->magnitude;
+	float vz = temp_v->nz / temp_v->magnitude;
+	pr[0] = pr[1] = pr[2] = pr[3] = 0;
+	/*vx *= dmax * 2;
+	vy *= dmax * 2;
+	vz *= dmax * 2;*/
+	p[0] = x - vx;
+	p[1] = y - vy;
+	p[2] = z - vz;
+	p[3] = 1;
+	glGetFloatv(GL_MODELVIEW_MATRIX, objXmat);
+	for (int i = 0; i < 4; i++)
+		for (int j = 0; j < 4; j++)
+			pr[i] += objXmat[i + 4 * j] * p[j];
+	px = pr[0];
+	py = pr[1];
+	/*px = x + vx;
+	py = x + vy;*/
+}
+
+// Algo step 1 - Initialize Ft with background color (gray)
+void initFt() {
+	for (int i = 0; i < IMG_RES; i++) {
+		for (int j = 0; j < IMG_RES; j++) {
+			ft[i][j][0] = ft[i][j][1] = ft[i][j][2] = (unsigned char)128;
+			ft[i][j][3] = (unsigned char)(0.4 * 255);
+		}
+	}
+}
+
+// Algo step 2 - Initialize F with background color (gray)
+void initF() {
+	for (int i = 0; i < IMG_RES; i++) {
+		for (int j = 0; j < IMG_RES; j++) {
+			f[i][j][0] = f[i][j][1] = f[i][j][2] = (unsigned char)128;
+			f[i][j][3] = (unsigned char)(0.5 * 255);
+		}
+	}
+}
+
+
+// Generate noise textures
+void gen_noise_tex()
+{
+	for (int n = 0; n < N_Noise; n++) {
+		for (int x = 0; x < IMG_RES_NOISE; x++)
+			for (int y = 0; y < IMG_RES_NOISE; y++)
+			{
+				noise_tex[x][y][0] =
+					noise_tex[x][y][1] =
+					noise_tex[x][y][2] = (unsigned char)255 * (rand() % 32768) / 32768.0;
+				noise_tex[x][y][3] = (unsigned char)(0.5 * 255);
+			}
+		glNewList(n + 1, GL_COMPILE);
+		glTexImage2D(GL_TEXTURE_2D, 0, 4, IMG_RES_NOISE, IMG_RES_NOISE, 0, GL_RGBA, GL_UNSIGNED_BYTE, noise_tex);
+		glEndList();
+	}
+}
+
+void set_world_space_view(float mat[]) {
+	glTranslatef(0.5f, -0.3f, 0.0f);
+	if (g_AutoRotate)
+	{
+		float axis[3] = { 0, 1, 0 };
+		float angle = (float)(GetTimeMs() - g_RotateTime) / 1000.0f;
+		float quat[4];
+		SetQuaternionFromAxisAngle(axis, angle, quat);
+		MultiplyQuaternions(g_RotateStart, quat, g_Rotation);
+	}
+	ConvertQuaternionToMatrix(g_Rotation, mat);
+	glMultMatrixf(mat);
+	glScalef(g_Zoom, g_Zoom, g_Zoom);
+}
+
+void reset_matrices() {
+	// reset the projection matrix
+	// float pr_mat[16];
+	float mv_mat[16];
+	// GLint m_mode;
+	// glGetFloatv(GL_PROJECTION_MATRIX, pr_mat);
+	glGetFloatv(GL_MODELVIEW_MATRIX, mv_mat);
+	// glGetIntegerv(GL_MATRIX_MODE, &m_mode);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	// glMultMatrixf(pr_mat);
+	// glGetIntegerv(GL_MATRIX_MODE, &m_mode);
+
+
+	//glGetFloatv(GL_PROJECTION_MATRIX, pr_mat);
+
+	// set the orthographic view and clipping planes
+	glOrtho(-2.5, 2.5, -2.5, 2.5, -1000.0, 4000.0);
+	// gluPerspective(45.0, 1.0, 0.1, 40.0);
+
+	//glGetFloatv(GL_PROJECTION_MATRIX, pr_mat);
+
+	// reset the modelview matrix
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+	glMultMatrixf(mv_mat);
+}
+
+void noise_blend_test() {
+	glClearColor(0, 0, 0, 1);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, IMG_RES, IMG_RES, 0, GL_RGBA, GL_UNSIGNED_BYTE, ft);
+	glBegin(GL_QUAD_STRIP);
+	glTexCoord2f(0.0, 0.0); glVertex2f(0, 0);
+	glTexCoord2f(0.0, 1.0); glVertex2f(1, 0);
+	glTexCoord2f(1.0, 0.0); glVertex2f(0, 1);
+	glTexCoord2f(1.0, 1.0); glVertex2f(1, 1);
+	glEnd();
+}
+
 // Callback function called by GLUT to render screen
 void Display(void)
 {
@@ -627,14 +736,129 @@ void Display(void)
 	glDisable(GL_CULL_FACE);
 	glEnable(GL_NORMALIZE);
 
+	glDisable(GL_COLOR_MATERIAL);
+	glDisable(GL_LIGHTING);
+	glDisable(GL_LIGHT0);
+
 	glEnable(GL_POLYGON_OFFSET_FILL);
 	glPolygonOffset(1., 1.);
 
-	//glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-	glShadeModel(GL_SMOOTH);
-	//glShadeModel(GL_FLAT);
+	glShadeModel(GL_FLAT);
 
 	// Set light
+	//glEnable(GL_LIGHTING);
+	//glEnable(GL_LIGHT0);
+	//v[0] = v[1] = v[2] = g_LightMultiplier * 0.4f; v[3] = 1.0f;
+	//glLightfv(GL_LIGHT0, GL_AMBIENT, v);
+	//v[0] = v[1] = v[2] = g_LightMultiplier * 0.8f; v[3] = 1.0f;
+	//glLightfv(GL_LIGHT0, GL_DIFFUSE, v);
+	//v[0] = -g_LightDirection[0]; v[1] = -g_LightDirection[1]; v[2] = -g_LightDirection[2]; v[3] = 0.0f;
+	//glLightfv(GL_LIGHT0, GL_POSITION, v);
+
+	//// Set material
+	//glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, g_MatAmbient);
+	//glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, g_MatDiffuse);
+
+	// Setup texutring params and enable texturing
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+	glEnable(GL_TEXTURE_2D);
+		
+	// get base texture image
+	// glDrawBuffer(GL_BACK);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, IMG_RES, IMG_RES, 0, GL_RGBA, GL_UNSIGNED_BYTE, ft);
+	glGetFloatv(GL_MODELVIEW_MATRIX, objXmat);
+	// reset transformation matrices from previous executions
+	reset_matrices();
+	//glGetFloatv(GL_MODELVIEW_MATRIX, objXmat);
+	/*float pr_mat[16];
+	float mv_mat[16];
+	glGetFloatv(GL_PROJECTION_MATRIX, pr_mat);
+	glGetFloatv(GL_MODELVIEW_MATRIX, mv_mat);*/
+	// go to world space
+	glPushMatrix();
+	//glGetFloatv(GL_MODELVIEW_MATRIX, objXmat);
+
+
+	// set the world space view to enable rotation etc.
+	set_world_space_view(mat);
+	/*glGetFloatv(GL_PROJECTION_MATRIX, pr_mat);
+	glGetFloatv(GL_MODELVIEW_MATRIX, mv_mat);*/
+	// choose color mapping for object
+	// setColorFunction();
+
+	// Currently in world space
+
+	// advect base texture and draw object
+
+	// advect texture
+	double px, py;
+	for (int i = 0; i < poly->ntris; i++) {
+		Triangle *t = poly->tlist[i];
+		glBegin(GL_POLYGON);
+		for (int j = 0; j < 3; j++) {
+			Vertex *v = t->verts[j];
+			// get advected coordinates for texture
+			getDistortedVertices(v, px, py);
+			v->tx[0] = px;
+			v->tx[1] = py;
+			// map advected coordinates to the object
+			glTexCoord2dv(v->tx);
+			glVertex3f(v->x, v->y, v->z);
+		}
+		glEnd();
+	}
+	// world space ends here - pop matrix to go to view space and blend the noise texture
+	glPopMatrix();
+
+	/*glGetFloatv(GL_PROJECTION_MATRIX, pr_mat);
+	glGetFloatv(GL_MODELVIEW_MATRIX, mv_mat);*/
+
+	//increment noise frame counter
+	frame_counter++;
+
+	// enable noise blending
+	glEnable(GL_BLEND);
+	// specify blend function
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	// specify depth function for depth testing
+	glDepthFunc(GL_GREATER);
+	// get noise image based on frame counter
+	glCallList(frame_counter % N_Noise + 1);
+	// draw the noise texture in the view space
+	glBegin(GL_QUAD_STRIP);
+	glTexCoord2f(0.0, 0.0);   glVertex3f(-25.0, -25.0, -39.9);
+	glTexCoord2f(0.0, tmax);  glVertex3f(-25.0, 25.0, -39.9);
+	glTexCoord2f(tmax, 0.0);  glVertex3f(25.0, -25.0, -39.9);
+	glTexCoord2f(tmax, tmax); glVertex3f(25.0, 25.0, -39.9);
+	glEnd();
+	glDepthFunc(GL_LESS);
+	// blending done - disable it
+	glDisable(GL_BLEND);
+
+	// read the advected and blended texture into Ft
+	// glReadBuffer(GL_BACK);
+	//glReadPixels(0, 0, IMG_RES, IMG_RES, GL_RGBA, GL_UNSIGNED_BYTE, ft);
+	glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, ft);
+	// glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, IMG_RES, IMG_RES, 0);
+
+	// all drawing finished - go back to world space and draw the shading, axes and the tweak bar
+	glPushMatrix();
+
+	// set the world space view to enable rotation etc.
+	set_world_space_view(mat);
+
+	// set texture mode to modulate to be able to draw the shaded texture on top of the original
+	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+	///*glEnable(GL_BLEND);
+	//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	//glShadeModel(GL_SMOOTH);*/
+	glShadeModel(GL_SMOOTH);
+	////// create new texture for blending with the Ft saved earlier
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, IMG_RES, IMG_RES, 0, GL_RGBA, GL_UNSIGNED_BYTE, ft);
 	glEnable(GL_LIGHTING);
 	glEnable(GL_LIGHT0);
 	v[0] = v[1] = v[2] = g_LightMultiplier * 0.4f; v[3] = 1.0f;
@@ -647,58 +871,50 @@ void Display(void)
 	// Set material
 	glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, g_MatAmbient);
 	glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, g_MatDiffuse);
-
-	// Rotate and draw shape
-	glPushMatrix();
-	glTranslatef(0.5f, -0.3f, 0.0f);
-	if (g_AutoRotate)
-	{
-		float axis[3] = { 0, 1, 0 };
-		float angle = (float)(GetTimeMs() - g_RotateTime) / 1000.0f;
-		float quat[4];
-		SetQuaternionFromAxisAngle(axis, angle, quat);
-		MultiplyQuaternions(g_RotateStart, quat, g_Rotation);
-	}
-	ConvertQuaternionToMatrix(g_Rotation, mat);
-	glMultMatrixf(mat);
-	glScalef(g_Zoom, g_Zoom, g_Zoom);
-
-	// The draw function
-	//glCallList(g_CurrentShape);
-
-	setColorFunction();
-
-	// Draw the 3D object
+	
+	// draw object with normals and texture mapping
 	for (int i = 0; i < poly->ntris; i++) {
-		Triangle *temp_t = poly->tlist[i];
+		Triangle *t = poly->tlist[i];
 		glBegin(GL_POLYGON);
 		for (int j = 0; j < 3; j++) {
-			Vertex *temp_v = temp_t->verts[j];
-			glNormal3d(temp_v->normal.entry[0], temp_v->normal.entry[1], temp_v->normal.entry[2]);
-			float rgb[3];
-			float x = temp_v->x;
-			float y = temp_v->y;
-			float z = temp_v->z;
-			float s = temp_v->s;
-			Rainbow_color(s, rgb);
-			glColor3f(rgb[0], rgb[1], rgb[2]);
-			glVertex3d(x, y, z);
+			Vertex *v = t->verts[j];
+			glNormal3dv(v->normal.entry);
+			glTexCoord2dv(v->tx);
+			// glColor3f(0.5, 0.5, 0.5);
+			glVertex3f(v->x, v->y, v->z);
 		}
 		glEnd();
 	}
+	//noise_blend_test();
+	glPopMatrix();
 
+	/*glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, f);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBegin(GL_QUAD_STRIP);
+	glTexCoord2f(0.0, 0.0);  glVertex3f(-5.0, -5.0, -5.0);
+	glTexCoord2f(0.0, 1.0); glVertex3f(-5.0, 5.0, -5.0);
+	glTexCoord2f(1.0, 0.0);  glVertex3f(5.0, -5.0, -5.0);
+	glTexCoord2f(1.0, 1.0); glVertex3f(5.0, 5.0, -5.0);
+	glEnd();
+	glDisable(GL_BLEND);*/
+
+	// done texturing - disable it.
+	glDisable(GL_TEXTURE);
+
+	glPushMatrix();
+	set_world_space_view(mat);
 	// Draw axes
 	if (g_Axes)
 		glCallList(AxesList);
 
-
-	glPopMatrix();
-
-	// Draw tweak bars
+	//	// Draw tweak bars
 	TwDraw();
-
+	// done drawing axes and tweak bar - pop matrix to go to view space
+	glPopMatrix();
 	// Present frame buffer
-	glutSwapBuffers();
+	// glutSwapBuffers();
+	glFlush();
 
 	// Recall Display at next frame
 	glutPostRedisplay();
@@ -776,6 +992,17 @@ void TW_CALL GetAxesCB(void *value, void *clientData)
 {
 	(void)clientData; // unused
 	*(int *)value = g_Axes; // copy g_AutoRotate to value
+}
+
+
+void TW_CALL setColorCB(const void *value, void *clientData)
+{
+	g_color = *(const int *)value; // copy value to g_Axes
+}
+
+void TW_CALL getColorCB(void *value, void *clientData)
+{
+	*(int *)value = g_color; // copy g_AutoRotate to value
 }
 
 
@@ -878,7 +1105,7 @@ void InitTwBar(TwBar *bar)
 		// ShapeEV associates Shape enum values with labels that will be displayed instead of enum values
 		//TwEnumVal shapeEV[NUM_SHAPES] = { { SHAPE_TEAPOT, "Teapot" },{ SHAPE_TORUS, "Torus" },{ SHAPE_CONE, "Cone" },{ BUNNY, "Bunny" } };
 
-		TwEnumVal shapeEV[NUM_SHAPES] = { { 0, "Bunny" },{ 1, "Torus - 1" },{ 2, "Torus - 2" },{ 3, "Sphere" } };
+		TwEnumVal shapeEV[NUM_SHAPES] = { { 0, "Bunny" },{ 1, "Sphere" },{ 2, "Torus - 1" },{ 3, "Torus - 2" } };
 
 		// Create a type for the enum shapeEV
 		TwType shapeType = TwDefineEnum("ShapeType", shapeEV, NUM_SHAPES);
@@ -902,16 +1129,16 @@ void InitTwBar(TwBar *bar)
 		TwAddVarRW(bar, "Object colors", ColorType, &whichColor, " help='Change object color.' ");
 	}
 
+	// Enable/disable coloring
+	TwAddVarCB(bar, "enableColor", TW_TYPE_BOOL32, setColorCB, getColorCB, NULL, "label='Enable/Disable Coloring of object'");
+
 	// calculate white threshold for the default object - torus
 
 	TwAddVarRW(bar, "WhiteThreshold", TW_TYPE_FLOAT, &g_WhiteThreshold,
 		" label = 'Adjust white threshold' min=0 max=1 step=0.01 keyIncr = 'w' keyDecr = 's' help='Increase/decrease white threshold' ");
 }
 
-
-
-
-// Main
+//// Main
 int main(int argc, char *argv[])
 {
 	TwBar *bar = NULL; // Pointer to the tweak bar
@@ -923,9 +1150,9 @@ int main(int argc, char *argv[])
 	glutInit(&argc, argv);
 	// First parameter is the buffer - single/double
 	// probably no noticeable difference between single and double
-	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
-	glutInitWindowSize(1024, 768);
-	MainWindow = glutCreateWindow("Final Project – IBFV – Binoy Dalal (1794070)");
+	glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB | GLUT_DEPTH);
+	glutInitWindowSize(800, 800);
+	MainWindow = glutCreateWindow("Final Project – IBFVS – Binoy Dalal (1794070)");
 	glutCreateMenu(NULL);
 
 	// Set GLUT callbacks
@@ -963,6 +1190,10 @@ int main(int argc, char *argv[])
 	poly->calc_bounding_sphere();
 	poly->calc_face_normals_and_area();
 	poly->average_normals();
+
+	// generate noise textures
+	gen_noise_tex();
+	initFt();
 
 	// Build a display list for the axes
 
