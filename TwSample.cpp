@@ -60,8 +60,8 @@ int g_AutoRotate = 0;
 int g_RotateTime = 0;
 float g_RotateStart[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 // Shapes material
-float g_MatAmbient[] = { 0.5f, 0.0f, 0.0f, 1.0f };
-float g_MatDiffuse[] = { 1.0f, 1.0f, 0.0f, 1.0f };
+float g_MatAmbient[] = { 0.5f, 0.5f, 0.5f, 0.5f };
+float g_MatDiffuse[] = { 1.0f, 1.0f, 1.0f, 0.5f };
 // Light parameter
 float g_LightMultiplier = 1.0f;
 float g_LightDirection[] = { -0.57735f, -0.57735f, -0.57735f };
@@ -166,14 +166,13 @@ float alpha = (0.12 * 255); // Blending factor for noise images
 
 int g_color = 0;
 
-// TODO - make configurable
-float g_step = 0.1;
-
 int frame_counter = 0; // counter for noise images
 
-float dmax = 0.9 / IMG_RES; // limit texture warping
+const float SCALE = 2.0;
 
-double tmax = IMG_RES / (0.24 * IMG_RES_NOISE);
+float dmax = 0.1 / IMG_RES; // limit texture warping
+
+double tmax = IMG_RES / (SCALE * IMG_RES_NOISE);
 
 float objXmat[16]; // to store the model view matrix for transforming the texture
 
@@ -484,7 +483,6 @@ InitAxesLists(void)
 	glEndList();
 }
 
-// TODO: angle deficit is probably not the correct property to visualize color. Find out which is the correct one.
 
 void Rainbow_color(float s, float rgb[3])
 {
@@ -540,8 +538,6 @@ void HeatMap(float s, float rgb[3]) {
 	rgb[1] = min((3 * max(t - (1. / 3.), 0)), 1); // 3 * (min(t-1/3, 1/3))
 	rgb[2] = min((3 * max(t - (2. / 3.), 0)), 1); // 3 * (min(t-2/3, 1/3))
 }
-
-//TODO Interface to move data range
 
 
 void Discrete(float s, float rgb[3]) {
@@ -611,9 +607,9 @@ void getDistortedVertices(Vertex* temp_v, double &px, double &py) {
 	float vy = temp_v->ny / temp_v->magnitude;
 	float vz = temp_v->nz / temp_v->magnitude;
 	pr[0] = pr[1] = pr[2] = pr[3] = 0;
-	/*vx *= dmax * 2;
+	vx *= dmax * 2;
 	vy *= dmax * 2;
-	vz *= dmax * 2;*/
+	vz *= dmax * 2;
 	p[0] = x - vx;
 	p[1] = y - vy;
 	p[2] = z - vz;
@@ -659,6 +655,32 @@ void gen_noise_tex()
 				noise_tex[x][y][0] =
 					noise_tex[x][y][1] =
 					noise_tex[x][y][2] = (unsigned char)255 * (rand() % 32768) / 32768.0;
+				noise_tex[x][y][3] = (unsigned char)(0.5 * 255);
+			}
+		glNewList(n + 1, GL_COMPILE);
+		glTexImage2D(GL_TEXTURE_2D, 0, 4, IMG_RES_NOISE, IMG_RES_NOISE, 0, GL_RGBA, GL_UNSIGNED_BYTE, noise_tex);
+		glEndList();
+	}
+}
+
+void gen_noise_tex_st() {
+	int lut[256]; // lookup table to store dynamic profiles
+	int phase[IMG_RES_NOISE][IMG_RES_NOISE]; // stores the phase for each pixel in the noise pattern
+	int t;
+
+	for (int i = 0; i < 256; i++) lut[i] = i < 127 ? 0 : 255; // fill lookup table with block pulse
+
+	for (int i = 0; i < IMG_RES_NOISE; i++)
+		for (int j = 0; j < IMG_RES_NOISE; j++) phase[i][j] = rand() % 256;
+
+	for (int n = 0; n < N_Noise; n++) {
+		t = n * 256 / N_Noise;
+		for (int x = 0; x < IMG_RES_NOISE; x++)
+			for (int y = 0; y < IMG_RES_NOISE; y++)
+			{
+				noise_tex[x][y][0] =
+					noise_tex[x][y][1] =
+					noise_tex[x][y][2] = (unsigned char)lut[(t + phase[x][y]) % 255];
 				noise_tex[x][y][3] = (unsigned char)(0.5 * 255);
 			}
 		glNewList(n + 1, GL_COMPILE);
@@ -727,7 +749,7 @@ void Display(void)
 {
 	float v[4]; // will be used to set light parameters
 	float mat[4 * 4]; // rotation matrix
-
+	Sleep(50);
 	// Clear frame buffer
 	glClearColor(0, 0, 0, 1);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
