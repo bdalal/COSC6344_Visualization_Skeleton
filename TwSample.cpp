@@ -153,10 +153,10 @@ GLuint	AxesList = 101;		// list to hold the axes
 int g_Axes = 0;   // Toggle Axes
 int g_Box = 0;    // Toggle Box
 
-const int IMG_RES_NOISE = 800; // resolution of the noise images
+const int IMG_RES_NOISE = 512; // resolution of the noise images
 unsigned char noise_tex[IMG_RES_NOISE][IMG_RES_NOISE][4];
 
-const int IMG_RES = 800; // resolution of image for IBFV
+const int IMG_RES = 512; // resolution of image for IBFV
 unsigned char ft[IMG_RES][IMG_RES][4]; // texture for Ft image in first step of algo.
 unsigned char f[IMG_RES][IMG_RES][4]; // texture for F image in second step of algo.
 
@@ -168,16 +168,22 @@ int g_color = 0;
 
 int frame_counter = 0; // counter for noise images
 
-const float SCALE = 2.0;
+float SCALE = 2.0;
 
-float dmax = 0.1 / IMG_RES; // limit texture warping
+#define dmax  SCALE / IMG_RES // limit texture warping
 
-double tmax = IMG_RES / (SCALE * IMG_RES_NOISE);
+#define tmax  IMG_RES / (SCALE * IMG_RES_NOISE)
 
 float objXmat[16]; // to store the model view matrix for transforming the texture
 
 #include "Skeleton.h"
 Polyhedron *poly = NULL;
+
+
+// TODO - add arrows to check correctness
+// TODO - make dmax, tmax, scale configurable
+
+// PROBLEMS - Aspect ratio gets kind of messed up for bigger screen sizes
 
 // Routine to set a quaternion from a rotation axis and angle
 // ( input axis = float[3] angle = float  output: quat = float[4] )
@@ -598,6 +604,7 @@ void setColorFunction() {
 	}
 }
 
+// TODO provide option to use either modelview advection or plain old advection
 void getDistortedVertices(Vertex* temp_v, double &px, double &py) {
 	float p[4], pr[4];
 	float x = temp_v->x;
@@ -852,10 +859,10 @@ void Display(void)
 	glCallList(frame_counter % N_Noise + 1);
 	// draw the noise texture in the view space
 	glBegin(GL_QUAD_STRIP);
-	glTexCoord2f(0.0, 0.0);   glVertex3f(-25.0, -25.0, -39.9);
-	glTexCoord2f(0.0, tmax);  glVertex3f(-25.0, 25.0, -39.9);
-	glTexCoord2f(tmax, 0.0);  glVertex3f(25.0, -25.0, -39.9);
-	glTexCoord2f(tmax, tmax); glVertex3f(25.0, 25.0, -39.9);
+	glTexCoord2f(0.0, 0.0);   glVertex3f(-5.0, -5.0, -39.9);
+	glTexCoord2f(0.0, tmax);  glVertex3f(-5.0, 5.0, -39.9);
+	glTexCoord2f(tmax, 0.0);  glVertex3f(5.0, -5.0, -39.9);
+	glTexCoord2f(tmax, tmax); glVertex3f(5.0, 5.0, -39.9);
 	glEnd();
 	glDepthFunc(GL_LESS);
 	// blending done - disable it
@@ -863,7 +870,7 @@ void Display(void)
 
 	// read the advected and blended texture into Ft
 	// glReadBuffer(GL_BACK);
-	//glReadPixels(0, 0, IMG_RES, IMG_RES, GL_RGBA, GL_UNSIGNED_BYTE, ft);
+	// glReadPixels(0, 0, IMG_RES, IMG_RES, GL_RGBA, GL_UNSIGNED_BYTE, ft);
 	glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, ft);
 	// glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, IMG_RES, IMG_RES, 0);
 
@@ -907,7 +914,7 @@ void Display(void)
 		}
 		glEnd();
 	}
-	//noise_blend_test();
+	// noise_blend_test();
 	glPopMatrix();
 
 	/*glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, f);
@@ -1113,13 +1120,13 @@ void InitTwBar(TwBar *bar)
 
 	// Add 'g_MatAmbient' to 'bar': this is a variable of type TW_TYPE_COLOR3F (3 floats color, alpha is ignored)
 	// and is inserted into a group named 'Material'.
-	TwAddVarRW(bar, "Ambient", TW_TYPE_COLOR3F, &g_MatAmbient, " group='Material' ");
+	// TwAddVarRW(bar, "Ambient", TW_TYPE_COLOR3F, &g_MatAmbient, " group='Material' ");
 
 	// Add 'g_MatDiffuse' to 'bar': this is a variable of type TW_TYPE_COLOR3F (3 floats color, alpha is ignored)
 	// and is inserted into group 'Material'.
-	TwAddVarRW(bar, "Diffuse", TW_TYPE_COLOR3F, &g_MatDiffuse, " group='Material' ");
+	// TwAddVarRW(bar, "Diffuse", TW_TYPE_COLOR3F, &g_MatDiffuse, " group='Material' ");
 
-	TwAddSeparator(bar, " objects ", NULL);
+	// TwAddSeparator(bar, " objects ", NULL);
 
 	// Add the enum variable 'g_CurrentShape' to 'bar'
 	// (before adding an enum variable, its enum type must be declared to AntTweakBar as follow)
@@ -1141,6 +1148,9 @@ void InitTwBar(TwBar *bar)
 
 	TwAddSeparator(bar, " others ", NULL);
 
+	// Enable/disable coloring
+	TwAddVarCB(bar, "enableColor", TW_TYPE_BOOL32, setColorCB, getColorCB, NULL, "label='Enable/Disable Coloring of object'");
+
 	// Add the enum variable 'whichColor' to 'bar' 
 	{
 		TwEnumVal ColorEV[NUM_COLORS] = { {0, "Rainbow"}, {1, "Blue-White-Red"}, {2, "Heat map"}, {3, "Discrete"}, {4, "NonLinear - Extremes"} };
@@ -1151,14 +1161,18 @@ void InitTwBar(TwBar *bar)
 		TwAddVarRW(bar, "Object colors", ColorType, &whichColor, " help='Change object color.' ");
 	}
 
-	// Enable/disable coloring
-	TwAddVarCB(bar, "enableColor", TW_TYPE_BOOL32, setColorCB, getColorCB, NULL, "label='Enable/Disable Coloring of object'");
-
-	// calculate white threshold for the default object - torus
-
 	TwAddVarRW(bar, "WhiteThreshold", TW_TYPE_FLOAT, &g_WhiteThreshold,
 		" label = 'Adjust white threshold' min=0 max=1 step=0.01 keyIncr = 'w' keyDecr = 's' help='Increase/decrease white threshold' ");
+
+	//TwAddVarRW(bar, "modifyTexWarp", TW_TYPE_FLOAT, &dmax, "label='Modify degree of texture warping' min=0.01 max=10 step=0.05");
+
+	//TwAddVarRW(bar, "modifyTexMap", TW_TYPE_FLOAT, &tmax, "label='Modify texture UV' min=1. max=10. step=0.5");
+	
+	TwAddVarRW(bar, "modifyScale", TW_TYPE_FLOAT, &SCALE, "label='Modify Scale' min=0.0001 max=512. step=0.1");
 }
+
+// TODO enable colors
+// TODO light object from all sides
 
 //// Main
 int main(int argc, char *argv[])
@@ -1173,7 +1187,7 @@ int main(int argc, char *argv[])
 	// First parameter is the buffer - single/double
 	// probably no noticeable difference between single and double
 	glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB | GLUT_DEPTH);
-	glutInitWindowSize(800, 800);
+	glutInitWindowSize(1024, 1024);
 	MainWindow = glutCreateWindow("Final Project – IBFVS – Binoy Dalal (1794070)");
 	glutCreateMenu(NULL);
 
