@@ -174,7 +174,17 @@ float SCALE = 2.0;
 
 #define tmax  IMG_RES / (SCALE * IMG_RES_NOISE)
 
-float objXmat[16]; // to store the model view matrix for transforming the texture
+#define X 0
+#define Y 1
+#define Z 2
+#define WINGS 0.10
+
+/* x, y, z, axes: */
+static float axx[3] = { 1., 0., 0. };
+static float ayy[3] = { 0., 1., 0. };
+static float azz[3] = { 0., 0., 1. };
+
+int g_arrows = 0; // Toggle Arrow heads
 
 #include "Skeleton.h"
 Polyhedron *poly = NULL;
@@ -604,9 +614,166 @@ void setColorFunction() {
 	}
 }
 
+///calculate the dot production of two vectors
+float dot(float v1[3], float v2[3])
+{
+	return(v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]);
+}
+
+///calculate the cross production of two vectors
+void cross(float v1[3], float v2[3], float vout[3])
+{
+	float tmp[3];
+	tmp[0] = v1[1] * v2[2] - v2[1] * v1[2];
+	tmp[1] = v2[0] * v1[2] - v1[0] * v2[2];
+	tmp[2] = v1[0] * v2[1] - v2[0] * v1[1];
+	vout[0] = tmp[0];
+	vout[1] = tmp[1];
+	vout[2] = tmp[2];
+}
+
+///Normalize vector
+float unit(float vin[3], float vout[3])
+{
+	float dist, f;
+	dist = vin[0] * vin[0] + vin[1] * vin[1] + vin[2] * vin[2];
+	if (dist > 0.0)
+	{
+		dist = sqrt(dist);
+		f = 1. / dist;
+		vout[0] = f * vin[0];
+		vout[1] = f * vin[1];
+		vout[2] = f * vin[2];
+	}
+	else
+	{
+		vout[0] = vin[0];
+		vout[1] = vin[1];
+		vout[2] = vin[2];
+	}
+	return(dist);
+}
+
+void Arrow(float tail[3], float head[3])
+{
+	float u[3], v[3], w[3]; /* arrow coordinate system */
+	float d; /* wing distance */
+	float x, y, z; /* point to plot */
+	float mag; /* magnitude of major direction */
+	float f; /* fabs of magnitude */
+	int axis; /* which axis is the major */
+	/* set w direction in u-v-w coordinate system: */
+	w[0] = head[0] - tail[0];
+	w[1] = head[1] - tail[1];
+	w[2] = head[2] - tail[2];
+	/* determine major direction: */
+	axis = X;
+	mag = fabs(w[0]);
+	if ((f = fabs(w[1])) > mag)
+	{
+		axis = Y;
+		mag = f;
+	}
+	if ((f = fabs(w[2])) > mag)
+	{
+		axis = Z;
+		mag = f;
+	}
+	/* set size of wings and turn w into a unit vector: */
+	d = WINGS * unit(w, w);
+	/* draw the shaft of the arrow: */
+	glBegin(GL_LINE_STRIP);
+	glColor3f(1., 1., 0.);
+	glVertex3fv(tail);
+	glVertex3fv(head);
+	glEnd();
+	/* draw two sets of wings in the non-major directions: */
+	if (axis != X)
+	{
+		cross(w, axx, v);
+		(void)unit(v, v);
+		cross(v, w, u);
+		x = head[0] + d * (u[0] - w[0]);
+		y = head[1] + d * (u[1] - w[1]);
+		z = head[2] + d * (u[2] - w[2]);
+		glBegin(GL_LINE_STRIP);
+		glColor3f(1., 1., 0.);
+		glVertex3fv(head);
+		glVertex3f(x, y, z);
+		glEnd();
+		x = head[0] + d * (-u[0] - w[0]);
+		y = head[1] + d * (-u[1] - w[1]);
+		z = head[2] + d * (-u[2] - w[2]);
+		glBegin(GL_LINE_STRIP);
+		glColor3f(1., 1., 0.);
+		glVertex3fv(head);
+		glVertex3f(x, y, z);
+		glEnd();
+	}
+	if (axis != Y)
+	{
+		cross(w, ayy, v);
+		(void)unit(v, v);
+		cross(v, w, u);
+		x = head[0] + d * (u[0] - w[0]);
+		y = head[1] + d * (u[1] - w[1]);
+		z = head[2] + d * (u[2] - w[2]);
+		glBegin(GL_LINE_STRIP);
+		glColor3f(1., 1., 0.);
+		glVertex3fv(head);
+		glVertex3f(x, y, z);
+		glEnd();
+		x = head[0] + d * (-u[0] - w[0]);
+		y = head[1] + d * (-u[1] - w[1]);
+		z = head[2] + d * (-u[2] - w[2]);
+		glBegin(GL_LINE_STRIP);
+		glColor3f(1., 1., 0.);
+		glVertex3fv(head);
+		glVertex3f(x, y, z);
+		glEnd();
+	}
+	if (axis != Z)
+	{
+		cross(w, azz, v);
+		(void)unit(v, v);
+		cross(v, w, u);
+		x = head[0] + d * (u[0] - w[0]);
+		y = head[1] + d * (u[1] - w[1]);
+		z = head[2] + d * (u[2] - w[2]);
+		glBegin(GL_LINE_STRIP);
+		glColor3f(1., 1., 0.);
+		glVertex3fv(head);
+		glVertex3f(x, y, z);
+		glEnd();
+		x = head[0] + d * (-u[0] - w[0]);
+		y = head[1] + d * (-u[1] - w[1]);
+		z = head[2] + d * (-u[2] - w[2]);
+		glBegin(GL_LINE_STRIP);
+		glColor3f(1., 1., 0.);
+		glVertex3fv(head);
+		glVertex3f(x, y, z);
+		glEnd();
+	}
+}
+
+void draw_3d_arrows() {
+	for (int i = 0; i < poly->nverts; i++) {
+		Vertex* v = poly->vlist[i];
+		glPushMatrix();
+		float arrow_head[3] = { v->x, v->y, v->z };
+		float arrow_direct[3] = { v->nx / v->magnitude, v->ny / v->magnitude, v->nz / v->magnitude };
+		glTranslatef(v->x, v->y, v->z);
+		glScalef(0.1, 0.1, 0.1);
+		Arrow(arrow_head, arrow_direct);
+		glPopMatrix();
+	}
+}
+
 // TODO provide option to use either modelview advection or plain old advection
 void getDistortedVertices(Vertex* temp_v, double &px, double &py) {
 	float p[4], pr[4];
+	float pr_mat[16];
+	glGetFloatv(GL_PROJECTION_MATRIX, pr_mat);
 	float x = temp_v->x;
 	float y = temp_v->y;
 	float z = temp_v->z;
@@ -621,10 +788,10 @@ void getDistortedVertices(Vertex* temp_v, double &px, double &py) {
 	p[1] = y - vy;
 	p[2] = z - vz;
 	p[3] = 1;
-	glGetFloatv(GL_MODELVIEW_MATRIX, objXmat);
+	// glGetFloatv(GL_MODELVIEW_MATRIX, objXmat);
 	for (int i = 0; i < 4; i++)
 		for (int j = 0; j < 4; j++)
-			pr[i] += objXmat[i + 4 * j] * p[j];
+			pr[i] += pr_mat[i + 4 * j] * p[j];
 	px = pr[0];
 	py = pr[1];
 	/*px = x + vx;
@@ -795,11 +962,24 @@ void Display(void)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 	glEnable(GL_TEXTURE_2D);
-		
+
 	// get base texture image
 	// glDrawBuffer(GL_BACK);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, IMG_RES, IMG_RES, 0, GL_RGBA, GL_UNSIGNED_BYTE, ft);
-	glGetFloatv(GL_MODELVIEW_MATRIX, objXmat);
+	//glGetFloatv(GL_MODELVIEW_MATRIX, objXmat);
+
+	double px, py;
+	for (int i = 0; i < poly->ntris; i++) {
+		Triangle *t = poly->tlist[i];
+		for (int j = 0; j < 3; j++) {
+			Vertex *v = t->verts[j];
+			// get advected coordinates for texture
+			getDistortedVertices(v, px, py);
+			v->tx[0] = px;
+			v->tx[1] = py;
+		}
+	}
+
 	// reset transformation matrices from previous executions
 	reset_matrices();
 	//glGetFloatv(GL_MODELVIEW_MATRIX, objXmat);
@@ -824,16 +1004,16 @@ void Display(void)
 	// advect base texture and draw object
 
 	// advect texture
-	double px, py;
+	//double px, py;
 	for (int i = 0; i < poly->ntris; i++) {
 		Triangle *t = poly->tlist[i];
 		glBegin(GL_POLYGON);
 		for (int j = 0; j < 3; j++) {
 			Vertex *v = t->verts[j];
 			// get advected coordinates for texture
-			getDistortedVertices(v, px, py);
+			/*getDistortedVertices(v, px, py);
 			v->tx[0] = px;
-			v->tx[1] = py;
+			v->tx[1] = py;*/
 			// map advected coordinates to the object
 			glTexCoord2dv(v->tx);
 			glVertex3f(v->x, v->y, v->z);
@@ -900,7 +1080,7 @@ void Display(void)
 	// Set material
 	glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, g_MatAmbient);
 	glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, g_MatDiffuse);
-	
+
 	// draw object with normals and texture mapping
 	for (int i = 0; i < poly->ntris; i++) {
 		Triangle *t = poly->tlist[i];
@@ -936,6 +1116,9 @@ void Display(void)
 	// Draw axes
 	if (g_Axes)
 		glCallList(AxesList);
+
+	if (g_arrows)
+		draw_3d_arrows();
 
 	//	// Draw tweak bars
 	TwDraw();
@@ -1083,6 +1266,14 @@ void TW_CALL loadNewObjCB(void *clientData)
 	glutPostRedisplay();
 }
 
+void TW_CALL setArrowCB(const void* value, void* clientData) {
+	g_arrows = *(const int *)value;
+}
+
+void TW_CALL getArrowCB(void* value, void* clientData) {
+	*(int *)value = g_arrows;
+}
+
 
 void InitTwBar(TwBar *bar)
 {
@@ -1126,7 +1317,7 @@ void InitTwBar(TwBar *bar)
 	// and is inserted into group 'Material'.
 	// TwAddVarRW(bar, "Diffuse", TW_TYPE_COLOR3F, &g_MatDiffuse, " group='Material' ");
 
-	// TwAddSeparator(bar, " objects ", NULL);
+	TwAddSeparator(bar, " objects ", NULL);
 
 	// Add the enum variable 'g_CurrentShape' to 'bar'
 	// (before adding an enum variable, its enum type must be declared to AntTweakBar as follow)
@@ -1167,8 +1358,10 @@ void InitTwBar(TwBar *bar)
 	//TwAddVarRW(bar, "modifyTexWarp", TW_TYPE_FLOAT, &dmax, "label='Modify degree of texture warping' min=0.01 max=10 step=0.05");
 
 	//TwAddVarRW(bar, "modifyTexMap", TW_TYPE_FLOAT, &tmax, "label='Modify texture UV' min=1. max=10. step=0.5");
-	
+
 	TwAddVarRW(bar, "modifyScale", TW_TYPE_FLOAT, &SCALE, "label='Modify Scale' min=0.0001 max=512. step=0.1");
+
+	TwAddVarCB(bar, "toggleArrows", TW_TYPE_BOOL32, setArrowCB, getArrowCB, NULL, "label='Toggle Arrows'");
 }
 
 // TODO enable colors

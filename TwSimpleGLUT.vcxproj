@@ -153,6 +153,7 @@ if exist bin32\glut32.dll  xcopy /y /f bin32\glut32.dll debug32\.
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <DataExecutionPrevention />
       <TargetMachine>MachineX64</TargetMachine>
+      <StackReserveSize>200000000</StackReserveSize>
     </Link>
     <PostBuildEvent>
       <Command>if exist c:\sdk\glut\lib\glut64.dll  xcopy /y /f c:\sdk\glut\lib\glut64.dll debug64\.
@@ -241,8 +242,10 @@ if exist bin64\glut64.dll  xcopy /y /f bin64\glut64.dll debug64\.
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Geometry.cpp" />
+    <ClCompile Include="IBFV_sample.cpp" />
     <ClCompile Include="icVector.cpp" />
     <ClCompile Include="ply.cpp" />
+    <ClCompile Include="Talea.cpp" />
     <ClCompile Include="TwSample.cpp" />
   </ItemGroup>
   <ItemGroup>
