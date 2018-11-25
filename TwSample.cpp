@@ -189,11 +189,8 @@ int g_arrows = 0; // Toggle Arrow heads
 #include "Skeleton.h"
 Polyhedron *poly = NULL;
 
-
-// TODO - add arrows to check correctness
-// TODO - make dmax, tmax, scale configurable
-
 // PROBLEMS - Aspect ratio gets kind of messed up for bigger screen sizes
+// PROBLEMS - Advection is not proper
 
 // Routine to set a quaternion from a rotation axis and angle
 // ( input axis = float[3] angle = float  output: quat = float[4] )
@@ -788,14 +785,13 @@ void getDistortedVertices(Vertex* temp_v, double &px, double &py) {
 	p[1] = y - vy;
 	p[2] = z - vz;
 	p[3] = 1;
-	// glGetFloatv(GL_MODELVIEW_MATRIX, objXmat);
 	for (int i = 0; i < 4; i++)
 		for (int j = 0; j < 4; j++)
 			pr[i] += pr_mat[i + 4 * j] * p[j];
 	px = pr[0];
 	py = pr[1];
-	/*px = x + vx;
-	py = x + vy;*/
+	/*px = x - vx;
+	py = y - vy;*/
 }
 
 // Algo step 1 - Initialize Ft with background color (gray)
@@ -817,7 +813,6 @@ void initF() {
 		}
 	}
 }
-
 
 // Generate noise textures
 void gen_noise_tex()
@@ -911,11 +906,95 @@ void noise_blend_test() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, IMG_RES, IMG_RES, 0, GL_RGBA, GL_UNSIGNED_BYTE, ft);
 	glBegin(GL_QUAD_STRIP);
-	glTexCoord2f(0.0, 0.0); glVertex2f(0, 0);
-	glTexCoord2f(0.0, 1.0); glVertex2f(1, 0);
-	glTexCoord2f(1.0, 0.0); glVertex2f(0, 1);
-	glTexCoord2f(1.0, 1.0); glVertex2f(1, 1);
+	glTexCoord2f(0.0, 0.0);  glVertex3f(-1.0, -1.0, -39.9);
+	glTexCoord2f(0.0, 1.0);  glVertex3f(-1.0, +1.0, -39.9);
+	glTexCoord2f(1.0, 0.0);  glVertex3f(+1.0, -1.0, -39.9);
+	glTexCoord2f(1.0, 1.0);  glVertex3f(+1.0, +1.0, -39.9);
 	glEnd();
+}
+
+void calcTextureCoords() {
+	for (int i = 0; i < poly->nverts; i++) {
+		Vertex *v = poly->vlist[i];
+		getDistortedVertices(v, v->tx[0], v->tx[1]);
+	}
+}
+
+void drawAdvectedTextureOnObject() {
+	for (int i = 0; i < poly->ntris; i++) {
+		Triangle *t = poly->tlist[i];
+		glBegin(GL_POLYGON);
+		for (int j = 0; j < 3; j++) {
+			Vertex *v = t->verts[j];
+			glTexCoord2dv(v->tx);
+			glVertex3f(v->x, v->y, v->z);
+		}
+		glEnd();
+	}
+}
+
+void blendNoise() {
+	// enable noise blending
+	glEnable(GL_BLEND);
+	// specify blend function
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	// specify depth function for depth testing
+	glDepthFunc(GL_GREATER);
+	// get noise image based on frame counter
+	glCallList(frame_counter % N_Noise + 1);
+	// draw the noise texture in the view space
+	glBegin(GL_QUAD_STRIP);
+	glTexCoord2f(0.0, 0.0); glVertex3f(-5.0, -5.0, -39.9);
+	glTexCoord2f(0.0, tmax); glVertex3f(-5.0, 5.0, -39.9);
+	glTexCoord2f(tmax, 0.0); glVertex3f(5.0, -5.0, -39.9);
+	glTexCoord2f(tmax, tmax); glVertex3f(5.0, 5.0, -39.9);
+	glEnd();
+	glDepthFunc(GL_LESS);
+	// blending done - disable it
+	glDisable(GL_BLEND);
+}
+
+void blendWithShade(float v[4]) {
+	// set texture mode to modulate to be able to draw the shaded texture on top of the original
+	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+	glShadeModel(GL_SMOOTH);
+	// create new texture for blending with the Ft saved earlier
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, IMG_RES, IMG_RES, 0, GL_RGBA, GL_UNSIGNED_BYTE, ft);
+	glEnable(GL_LIGHTING);
+	glEnable(GL_LIGHT0);
+	v[0] = v[1] = v[2] = g_LightMultiplier * 0.4f; v[3] = 1.0f;
+	glLightfv(GL_LIGHT0, GL_AMBIENT, v);
+	v[0] = v[1] = v[2] = g_LightMultiplier * 0.8f; v[3] = 1.0f;
+	glLightfv(GL_LIGHT0, GL_DIFFUSE, v);
+	v[0] = -g_LightDirection[0]; v[1] = -g_LightDirection[1]; v[2] = -g_LightDirection[2]; v[3] = 0.0f;
+	glLightfv(GL_LIGHT0, GL_POSITION, v);
+	// Set material
+	glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, g_MatAmbient);
+	glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, g_MatDiffuse);
+
+	// draw object with normals and texture mapping
+	for (int i = 0; i < poly->ntris; i++) {
+		Triangle *t = poly->tlist[i];
+		glBegin(GL_POLYGON);
+		for (int j = 0; j < 3; j++) {
+			Vertex *v = t->verts[j];
+			glNormal3dv(v->normal.entry);
+			glTexCoord2dv(v->tx);
+			glVertex3f(v->x, v->y, v->z);
+		}
+		glEnd();
+	}
+	//noise_blend_test();
+}
+
+void setupTexturing() {
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+	glEnable(GL_TEXTURE_2D);
 }
 
 // Callback function called by GLUT to render screen
@@ -941,118 +1020,39 @@ void Display(void)
 
 	glShadeModel(GL_FLAT);
 
-	// Set light
-	//glEnable(GL_LIGHTING);
-	//glEnable(GL_LIGHT0);
-	//v[0] = v[1] = v[2] = g_LightMultiplier * 0.4f; v[3] = 1.0f;
-	//glLightfv(GL_LIGHT0, GL_AMBIENT, v);
-	//v[0] = v[1] = v[2] = g_LightMultiplier * 0.8f; v[3] = 1.0f;
-	//glLightfv(GL_LIGHT0, GL_DIFFUSE, v);
-	//v[0] = -g_LightDirection[0]; v[1] = -g_LightDirection[1]; v[2] = -g_LightDirection[2]; v[3] = 0.0f;
-	//glLightfv(GL_LIGHT0, GL_POSITION, v);
-
-	//// Set material
-	//glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, g_MatAmbient);
-	//glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, g_MatDiffuse);
-
 	// Setup texutring params and enable texturing
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-	glEnable(GL_TEXTURE_2D);
+	setupTexturing();
 
 	// get base texture image
-	// glDrawBuffer(GL_BACK);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, IMG_RES, IMG_RES, 0, GL_RGBA, GL_UNSIGNED_BYTE, ft);
-	//glGetFloatv(GL_MODELVIEW_MATRIX, objXmat);
 
-	double px, py;
-	for (int i = 0; i < poly->ntris; i++) {
-		Triangle *t = poly->tlist[i];
-		for (int j = 0; j < 3; j++) {
-			Vertex *v = t->verts[j];
-			// get advected coordinates for texture
-			getDistortedVertices(v, px, py);
-			v->tx[0] = px;
-			v->tx[1] = py;
-		}
-	}
+	// calculate distorted texture coordinates
+	calcTextureCoords();
 
 	// reset transformation matrices from previous executions
 	reset_matrices();
-	//glGetFloatv(GL_MODELVIEW_MATRIX, objXmat);
-	/*float pr_mat[16];
-	float mv_mat[16];
-	glGetFloatv(GL_PROJECTION_MATRIX, pr_mat);
-	glGetFloatv(GL_MODELVIEW_MATRIX, mv_mat);*/
-	// go to world space
-	glPushMatrix();
-	//glGetFloatv(GL_MODELVIEW_MATRIX, objXmat);
 
+	// start drawing object
+	glPushMatrix();
 
 	// set the world space view to enable rotation etc.
 	set_world_space_view(mat);
-	/*glGetFloatv(GL_PROJECTION_MATRIX, pr_mat);
-	glGetFloatv(GL_MODELVIEW_MATRIX, mv_mat);*/
-	// choose color mapping for object
-	// setColorFunction();
 
-	// Currently in world space
+	// draw object with advected texture
+	drawAdvectedTextureOnObject();
 
-	// advect base texture and draw object
-
-	// advect texture
-	//double px, py;
-	for (int i = 0; i < poly->ntris; i++) {
-		Triangle *t = poly->tlist[i];
-		glBegin(GL_POLYGON);
-		for (int j = 0; j < 3; j++) {
-			Vertex *v = t->verts[j];
-			// get advected coordinates for texture
-			/*getDistortedVertices(v, px, py);
-			v->tx[0] = px;
-			v->tx[1] = py;*/
-			// map advected coordinates to the object
-			glTexCoord2dv(v->tx);
-			glVertex3f(v->x, v->y, v->z);
-		}
-		glEnd();
-	}
 	// world space ends here - pop matrix to go to view space and blend the noise texture
 	glPopMatrix();
-
-	/*glGetFloatv(GL_PROJECTION_MATRIX, pr_mat);
-	glGetFloatv(GL_MODELVIEW_MATRIX, mv_mat);*/
 
 	//increment noise frame counter
 	frame_counter++;
 
-	// enable noise blending
-	glEnable(GL_BLEND);
-	// specify blend function
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	// specify depth function for depth testing
-	glDepthFunc(GL_GREATER);
-	// get noise image based on frame counter
-	glCallList(frame_counter % N_Noise + 1);
-	// draw the noise texture in the view space
-	glBegin(GL_QUAD_STRIP);
-	glTexCoord2f(0.0, 0.0);   glVertex3f(-5.0, -5.0, -39.9);
-	glTexCoord2f(0.0, tmax);  glVertex3f(-5.0, 5.0, -39.9);
-	glTexCoord2f(tmax, 0.0);  glVertex3f(5.0, -5.0, -39.9);
-	glTexCoord2f(tmax, tmax); glVertex3f(5.0, 5.0, -39.9);
-	glEnd();
-	glDepthFunc(GL_LESS);
-	// blending done - disable it
-	glDisable(GL_BLEND);
+	//blend noise
+	blendNoise();
 
 	// read the advected and blended texture into Ft
-	// glReadBuffer(GL_BACK);
-	// glReadPixels(0, 0, IMG_RES, IMG_RES, GL_RGBA, GL_UNSIGNED_BYTE, ft);
 	glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, ft);
-	// glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, IMG_RES, IMG_RES, 0);
+	// glReadPixels(300, 200, 512, 512, GL_RGBA, GL_UNSIGNED_BYTE, ft);
 
 	// all drawing finished - go back to world space and draw the shading, axes and the tweak bar
 	glPushMatrix();
@@ -1060,56 +1060,12 @@ void Display(void)
 	// set the world space view to enable rotation etc.
 	set_world_space_view(mat);
 
-	// set texture mode to modulate to be able to draw the shaded texture on top of the original
-	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-	///*glEnable(GL_BLEND);
-	//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	//glShadeModel(GL_SMOOTH);*/
-	glShadeModel(GL_SMOOTH);
-	////// create new texture for blending with the Ft saved earlier
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, IMG_RES, IMG_RES, 0, GL_RGBA, GL_UNSIGNED_BYTE, ft);
-	glEnable(GL_LIGHTING);
-	glEnable(GL_LIGHT0);
-	v[0] = v[1] = v[2] = g_LightMultiplier * 0.4f; v[3] = 1.0f;
-	glLightfv(GL_LIGHT0, GL_AMBIENT, v);
-	v[0] = v[1] = v[2] = g_LightMultiplier * 0.8f; v[3] = 1.0f;
-	glLightfv(GL_LIGHT0, GL_DIFFUSE, v);
-	v[0] = -g_LightDirection[0]; v[1] = -g_LightDirection[1]; v[2] = -g_LightDirection[2]; v[3] = 0.0f;
-	glLightfv(GL_LIGHT0, GL_POSITION, v);
+	blendWithShade(v);
 
-	// Set material
-	glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, g_MatAmbient);
-	glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, g_MatDiffuse);
-
-	// draw object with normals and texture mapping
-	for (int i = 0; i < poly->ntris; i++) {
-		Triangle *t = poly->tlist[i];
-		glBegin(GL_POLYGON);
-		for (int j = 0; j < 3; j++) {
-			Vertex *v = t->verts[j];
-			glNormal3dv(v->normal.entry);
-			glTexCoord2dv(v->tx);
-			// glColor3f(0.5, 0.5, 0.5);
-			glVertex3f(v->x, v->y, v->z);
-		}
-		glEnd();
-	}
-	// noise_blend_test();
 	glPopMatrix();
 
-	/*glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, f);
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glBegin(GL_QUAD_STRIP);
-	glTexCoord2f(0.0, 0.0);  glVertex3f(-5.0, -5.0, -5.0);
-	glTexCoord2f(0.0, 1.0); glVertex3f(-5.0, 5.0, -5.0);
-	glTexCoord2f(1.0, 0.0);  glVertex3f(5.0, -5.0, -5.0);
-	glTexCoord2f(1.0, 1.0); glVertex3f(5.0, 5.0, -5.0);
-	glEnd();
-	glDisable(GL_BLEND);*/
-
 	// done texturing - disable it.
-	glDisable(GL_TEXTURE);
+	glDisable(GL_TEXTURE_2D);
 
 	glPushMatrix();
 	set_world_space_view(mat);
@@ -1124,8 +1080,7 @@ void Display(void)
 	TwDraw();
 	// done drawing axes and tweak bar - pop matrix to go to view space
 	glPopMatrix();
-	// Present frame buffer
-	// glutSwapBuffers();
+
 	glFlush();
 
 	// Recall Display at next frame
