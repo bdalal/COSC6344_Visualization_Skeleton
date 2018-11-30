@@ -8,7 +8,7 @@
 
 #include "Skeleton.h"
 
-const int BRES = 512; // Resolution of the base image
+const int BRES = 640; // Resolution of the base image
 const int NRES = 64; // Resolution of the noise image
 const int NNoise = 32; // No. of noise images
 static GLuint noiseTexImg[NNoise]; // 32 noise images
@@ -17,9 +17,9 @@ static GLuint FsTex; // Fs image
 static GLubyte noiseTex[NRES][NRES][4]; // to store a noise pattern
 static GLubyte baseTex[BRES][BRES][3]; // to store the base image pattern
 static int fctr = 0; // noise frame counter
-static float alpha = 0.3; // alpha channel for noise images
+static float alpha = 0.4; // alpha channel for noise images
 static float tmax = BRES / NRES; // texture repeat parameter
-static float dmax = 0.1; // paramter to limit texture advection
+static float dmax = 0.5; // paramter to limit texture advection
 Polyhedron *poly = NULL; // 3D object loaded from ply file
 
 void genNoiseTexSt() {
@@ -161,39 +161,99 @@ void blendWithFt() {
 	glTexCoord2f(1, 0); glVertex3f(+2, -1.5, -39);
 	glTexCoord2f(1, 1); glVertex3f(+2, +1.5, -39);
 	glEnd();
-	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+	//glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 	glDepthFunc(GL_LESS);
 	glDisable(GL_BLEND);
 	glPopMatrix();
 }
 
+void blendWithShading() {
+	glPushMatrix();
+	GLfloat ambient[] = { 0.3, 0.3, 0.3, 1.0 };
+	GLfloat diffuse[] = { 0.8, .8, 1., 1.0 };
+	GLfloat specular[] = { 0.8, 0.8, 1.0, 1.0 };
+	glShadeModel(GL_SMOOTH);
+	/*glEnable(GL_LIGHTING);
+	glEnable(GL_LIGHT0);
+	glEnable(GL_NORMALIZE);*/
+	/*glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);*/
+	glBindTexture(GL_TEXTURE_2D, FtTex);
+	/*glEnable(GL_COLOR_MATERIAL);
+	glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
+	glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, ambient);
+	glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, diffuse);
+	glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, specular);
+	glMateriali(GL_FRONT_AND_BACK, GL_SHININESS, 80);*/
+
+	for (int i = 0; i < poly->ntris; i++) {
+		Triangle *t = poly->tlist[i];
+		glBegin(GL_TRIANGLES);
+		for (int j = 0; j < 3; j++) {
+			Vertex *v = t->verts[j];
+			glNormal3dv(v->normal.entry);
+			glTexCoord2f(v->tx[0], v->tx[1]);
+			glVertex3f(v->x, v->y, v->z);
+		}
+		glEnd();
+	}
+
+	glDisable(GL_TEXTURE_2D);
+	glPopMatrix();
+}
+
+void setView() {
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glOrtho(-1., 1., -1., 1., -5., 1000);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+}
+
 void display(void) {
-	glClearColor(0, 0, 0, 1); // reset to black background
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear color and depth buffers
+	GLfloat ambient[] = { 0.3, 0.3, 0.3, 1.0 };
+	//GLfloat diffuse[] = { 1., 0.6, 0, 1.0};
+	GLfloat diffuse[] = { 0.8, .8, 1., 1.0 };
+	GLfloat specular[] = { 0.8, 0.8, 1.0, 1.0 };
+	int shiny = 100;
+
+	glClearColor(0, 0, 0, 1);  // background for rendering color coding and lighting
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glShadeModel(GL_FLAT);
+	glDisable(GL_COLOR_MATERIAL);
+	glDisable(GL_LIGHTING);
+	glDisable(GL_LIGHT0);
+	glEnable(GL_DEPTH_TEST);
+
+	glEnable(GL_TEXTURE_2D);
+	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+
+	setView();
 
 	calcAdvectedTexCoords(); // calculate texture advection based on flow
 
 	/* draw object with base image Ft */
 	drawObjectWithFt();
 
-	blendWithFt();
+	//blendWithFt();
 
 	///* blend noise */
 	blendNoise();
 
-	// is blank for some reason
+	// is blank for some reason - seems to be working now though there's strange behavior for 800px base image
 	glReadPixels(0, 0, BRES, BRES, GL_RGB, GL_UNSIGNED_BYTE, baseTex);
 	glBindTexture(GL_TEXTURE_2D, FtTex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, BRES, BRES, 0, GL_RGB, GL_UNSIGNED_BYTE, baseTex);
 
-
+	// blend with shading
+	blendWithShading();
 
 	//drawObjectWithNoise();
 
 	glFlush(); // flush frame buffer contents to screen
 	glutPostRedisplay(); // call display again
 
-	Sleep(50);
+	Sleep(100000);
 }
 
 void reshape(int width, int height) {
@@ -217,7 +277,7 @@ int main(int argc, char* argv[]) {
 	glutDisplayFunc(display);
 	glutReshapeFunc(reshape);
 
-	FILE *this_file = fopen("./models/bunny1.ply", "r");
+	FILE *this_file = fopen("./models/sphere1.ply", "r");
 	poly = new Polyhedron(this_file);
 	fclose(this_file);
 	poly->initialize(); // initialize everything
