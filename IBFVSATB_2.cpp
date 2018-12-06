@@ -7,35 +7,33 @@
 #include <math.h>
 #include "Skeleton.h"
 
-#define NUM_SHAPES 4
-#define tmax IMG_RES / (SCALE * NOISE_RES)
+#define NUM_SHAPES 4 // no. of objects available
+#define tmax IMG_RES / (SCALE * NOISE_RES) // defines texture mapping coordinates
+// Major directions for drawing arrows
 #define X 0
 #define Y 1
 #define Z 2
-#define WINGS 0.10
+#define WINGS 0.10 // size of wings of the arrow
 
 int MainWindow;
-const int IMG_RES = 512;
-const int NOISE_RES = 64;
+int g_AutoRotate = 0;
+int g_RotateTime = 0;
+int g_CurrentShape = 0;
+int g_Axes = 0;
+int g_arrows = 0;
+int g_animate = 1;
+const int IMG_RES = 512; // Base image resolution
+const int NOISE_RES = 64; // Noise image resolution
 const int NNoise = 32; // No. of noise images
+static int xorder[] = { 1, 2, -3, 4 };
+static int yorder[] = { 1, 2, 3, -2, 4 };
+static int zorder[] = { 1, 2, 3, 4, -5, 6 };
+static int fctr = 0; // noise frame counter
+
 const float BOXSIZE = 2.f;
 const float AXES_WIDTH = 3.;
 const float LENFRAC = 0.10f; // fraction of the length to use as height of the characters
 const float BASEFRAC = 1.10f; // fraction of length to use as start location of the characters
-static float alpha = 0.12; // alpha channel for noise images
-static float xx[] = { 0.f, 1.f, 0.f, 1.f };
-static float xy[] = { -.5f, .5f, .5f, -.5f };
-static int xorder[] = { 1, 2, -3, 4 };
-static float yx[] = { 0.f, 0.f, -.5f, .5f };
-static float yy[] = { 0.f, .6f, 1.f, 1.f };
-static int yorder[] = { 1, 2, 3, -2, 4 };
-static float zx[] = { 1.f, 0.f, 1.f, 0.f, .25f, .75f };
-static float zy[] = { .5f, .5f, -.5f, -.5f, 0.f, 0.f };
-static int zorder[] = { 1, 2, 3, 4, -5, 6 };
-/* x, y, z, axes: */
-static float axx[3] = { 1., 0., 0. };
-static float ayy[3] = { 0., 1., 0. };
-static float azz[3] = { 0., 0., 1. };
 // Shapes material
 float g_MatAmbient[] = { 0.5f, 0.5f, 0.5f, 0.5f };
 float g_MatDiffuse[] = { 1.0f, 1.0f, 1.0f, 0.5f };
@@ -47,19 +45,125 @@ float g_LightMultiplier = 1.0f;
 float g_LightDirection[] = { -0.57735f, -0.57735f, -0.57735f };
 float SCALE = 0.5;
 float dmax = 0.00225;
-int g_AutoRotate = 0;
-int g_RotateTime = 0;
-int g_CurrentShape = 0;
-int g_Axes = 0;
-int g_arrows = 0;
-static int fctr = 0; // noise frame counter
+float s_max, s_min;
+static float alpha = 0.12; // alpha channel for noise images
+static float xx[] = { 0.f, 1.f, 0.f, 1.f };
+static float xy[] = { -.5f, .5f, .5f, -.5f };
+static float yx[] = { 0.f, 0.f, -.5f, .5f };
+static float yy[] = { 0.f, .6f, 1.f, 1.f };
+static float zx[] = { 1.f, 0.f, 1.f, 0.f, .25f, .75f };
+static float zy[] = { .5f, .5f, -.5f, -.5f, 0.f, 0.f };
+/* x, y, z, axes: */
+static float axx[3] = { 1., 0., 0. };
+static float ayy[3] = { 0., 1., 0. };
+static float azz[3] = { 0., 0., 1. };
+
 GLuint BoxList = 100;
 GLuint AxesList = 101;
+
 static GLuint noiseTexImg[NNoise]; // 32 noise images
 static GLuint FtTex; // Ft image
+
 static GLubyte noiseTex[NOISE_RES][NOISE_RES][4]; // to store a noise pattern
 static GLubyte baseTex[IMG_RES][IMG_RES][3]; // to store the base image pattern
-Polyhedron *poly;
+
+Polyhedron *poly; // data structure to hold the object
+
+// Color space conversion function HSV to RGB
+void HsvRgb(float hsv[3], float rgb[3])
+{
+	float h, s, v;			// hue, sat, value
+	float r, g, b;			// red, green, blue
+	float i, f, p, q, t;	// interim values
+	// guarantee valid input:
+	h = hsv[0] / 60.;
+	while (h >= 6.)	h -= 6.;
+	while (h < 0.) 	h += 6.;
+	s = hsv[1];
+	if (s < 0.)
+		s = 0.;
+	if (s > 1.)
+		s = 1.;
+	v = hsv[2];
+	if (v < 0.)
+		v = 0.;
+	if (v > 1.)
+		v = 1.;
+	// if sat==0, then is a gray:
+	if (s == 0.0)
+	{
+		rgb[0] = rgb[1] = rgb[2] = v;
+		return;
+	}
+	// get an rgb from the hue itself:
+	i = floor(h);
+	f = h - i;
+	p = v * (1. - s);
+	q = v * (1. - s * f);
+	t = v * (1. - (s * (1. - f)));
+	switch ((int)i)
+	{
+	case 0:
+		r = v;	g = t;	b = p;
+		break;
+
+	case 1:
+		r = q;	g = v;	b = p;
+		break;
+
+	case 2:
+		r = p;	g = v;	b = t;
+		break;
+
+	case 3:
+		r = p;	g = q;	b = v;
+		break;
+
+	case 4:
+		r = t;	g = p;	b = v;
+		break;
+
+	case 5:
+		r = v;	g = p;	b = q;
+		break;
+	}
+	rgb[0] = r;
+	rgb[1] = g;
+	rgb[2] = b;
+}
+
+// Rainbow color scheme
+void Rainbow_color(float s, float rgb[3])
+{
+	float t = (s - s_min) / (s_max - s_min);
+	// make sure t is between 0 and 1, if not, rgb should be black
+	if (t < 0 || t>1) {
+		rgb[0] = rgb[1] = rgb[2] = 0.;
+		return;
+	}
+	float hsv[3] = { 1. };
+	// map the scalar value linearly to the hue channel of the HSV
+	hsv[0] = (1.0 - t) * 240;
+	hsv[1] = hsv[2] = 1.; // set the saturation and value as 1
+	// Call the HSV to RGB conversion function
+	HsvRgb(hsv, rgb);
+}
+
+// Calculate max and min magnitude
+void calcLimits() {
+	s_max = s_min = poly->tlist[0]->verts[0]->magnitude;
+	for (int i = 0; i < poly->ntris; i++) {
+		Triangle *temp_t = poly->tlist[i];
+		for (int j = 0; j < 3; j++) {
+			Vertex *temp_v = temp_t->verts[j];
+			float s = temp_v->magnitude;
+			if (s > s_max)
+				s_max = s;
+			if (s < s_min)
+				s_min = s;
+		}
+	}
+}
 
 void SetQuaternionFromAxisAngle(const float *axis, float angle, float *quat)
 {
@@ -118,11 +222,13 @@ int GetTimeMs()
 #endif
 }
 
+// Clear the frame for next rendering
 void clearFrame() {
 	glClearColor(0, 0, 0, 1);  // background for rendering color coding and lighting
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
+// Setup initial display params for rendering
 void setupDisplayParams() {
 	glShadeModel(GL_FLAT);
 	glEnable(GL_DEPTH_TEST);
@@ -131,6 +237,7 @@ void setupDisplayParams() {
 	glDisable(GL_LIGHT0);
 }
 
+// Setup and enable texturing
 void enableTexturing() {
 	glEnable(GL_TEXTURE_2D);
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
@@ -140,6 +247,7 @@ void enableTexturing() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 }
 
+// Setup viewport - ortho has to be between 0 and 1 for a correct mapping
 void setupView(float mat[]) {
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
@@ -148,10 +256,12 @@ void setupView(float mat[]) {
 	glLoadIdentity();
 }
 
+// Disable texturing
 void disableTexturing() {
 	glDisable(GL_TEXTURE_2D);
 }
 
+// Compute advected texture coordinates
 void getAdvectedCoords(Vertex *v) {
 	float mat[16], p[4], pr[4];
 	glGetFloatv(GL_MODELVIEW_MATRIX, mat);
@@ -167,6 +277,7 @@ void getAdvectedCoords(Vertex *v) {
 	v->tx[1] = pr[1];
 }
 
+// Store the advected texture coordinates
 void calcTextureCoords() {
 	for (int i = 0; i < poly->nverts; i++) {
 		Vertex *v = poly->vlist[i];
@@ -174,9 +285,9 @@ void calcTextureCoords() {
 	}
 }
 
+// Draw the obejct texture mapped with the advected base texture
 void drawObjectWithFt() {
-	glDrawBuffer(GL_BACK);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, baseTex);
+	glBindTexture(GL_TEXTURE_2D, FtTex);
 	for (int i = 0; i < poly->ntris; i++) {
 		Triangle* t = poly->tlist[i];
 		glBegin(GL_TRIANGLES);
@@ -188,29 +299,36 @@ void drawObjectWithFt() {
 	}
 }
 
+// Blend in 1 of 32 noise patterns
 void blendNoise() {
-	glBindTexture(GL_TEXTURE_2D, noiseTexImg[fctr % NNoise]);
+	if (g_animate) {
+		glBindTexture(GL_TEXTURE_2D, noiseTexImg[fctr % NNoise]);
+		fctr++;
+	}
+	else {
+		glBindTexture(GL_TEXTURE_2D, noiseTexImg[fctr % NNoise]);
+	}
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glDepthFunc(GL_GREATER);
 	glBegin(GL_QUAD_STRIP);
-	glTexCoord2f(0, 0);       glVertex3f(-1, -1, -40);
-	glTexCoord2f(0, tmax);    glVertex3f(-1, 1, -40);
+	glTexCoord2f(0, 0);    glVertex3f(-1, -1, -40);
+	glTexCoord2f(0, tmax); glVertex3f(-1, 1, -40);
 	glTexCoord2f(tmax, 0);    glVertex3f(1, -1, -40);
 	glTexCoord2f(tmax, tmax); glVertex3f(1, 1, -40);
 	glEnd();
 	glDisable(GL_BLEND);
 	glDepthFunc(GL_LESS);
-	fctr++;
 }
 
+// Read blended image back into base texture
 void readImage() {
-	glReadBuffer(GL_BACK);
 	glReadPixels(0, 0, IMG_RES, IMG_RES, GL_RGB, GL_UNSIGNED_BYTE, baseTex);
 	glBindTexture(GL_TEXTURE_2D, FtTex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, baseTex);
 }
 
+// Draw shaded object texture mapped with the advected texture
 void blendWithShading() {
 	float v[4];
 	clearFrame();
@@ -241,6 +359,7 @@ void blendWithShading() {
 	}
 }
 
+// Set rotation/scaling and other settings for effective visualization
 void setScene(float mat[]) {
 	glTranslatef(0.0, 0.0, -0.50);
 	glTranslatef(poly->center.entry[0], poly->center.entry[1], poly->center.entry[2]);
@@ -409,6 +528,28 @@ void drawArrows() {
 	}
 }
 
+// Color object based on magnitude - does not work at the moment
+void drawColorMap() {
+	glShadeModel(GL_SMOOTH);
+	Triangle *t;
+	Vertex *v;
+	float rgb[3];
+	for (int i = 0; i < poly->ntris; i++)
+	{
+		t = poly->tlist[i];
+		glBegin(GL_TRIANGLES);
+		for (int j = 0; j < 3; j++)
+		{
+			v = t->verts[j];
+			Rainbow_color(v->magnitude, rgb);
+			glNormal3d(v->normal.entry[0], v->normal.entry[1], v->normal.entry[2]);
+			glColor3f(rgb[0], rgb[1], rgb[2]);
+			glVertex3d(v->x, v->y, v->z);
+		}
+		glEnd();
+	}
+}
+
 void Display(void) {
 	float mat[16];
 
@@ -449,11 +590,12 @@ void Display(void) {
 
 }
 
+// Reshape does not change the viewport size
 void Reshape(int width, int height) {
-	glViewport(0, 0, width, height);
+	glViewport(0, 0, IMG_RES, IMG_RES);
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	glOrtho(-1, 1, -1, 1, -5, 4000);
+	glOrtho(0, 1, 0, 1, -1000, 4000);
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 	gluLookAt(0, 0, 5, 0, 0, 0, 0, 1, 0);
@@ -465,6 +607,7 @@ void Terminate(void) {
 	TwTerminate();
 }
 
+// Generate noise textures
 void genNoise() {
 	glGenTextures(32, noiseTexImg);
 	int lut[256]; // lookup table to store dynamic profiles
@@ -492,6 +635,7 @@ void genNoise() {
 	}
 }
 
+// Generate the base texture
 void initFt() {
 	glGenTextures(1, &FtTex);
 	for (int i = 0; i < IMG_RES; i++) {
@@ -704,6 +848,7 @@ void TW_CALL loadNewObjCB(void *clientData)
 	poly->average_normals();
 	poly->normalize_Field();
 	poly->calc_vector_projection();
+	calcLimits();
 	glutSetWindow(MainWindow);
 	glutPostRedisplay();
 }
@@ -716,13 +861,21 @@ void TW_CALL getArrowCB(void* value, void* clientData) {
 	*(int *)value = g_arrows;
 }
 
+void TW_CALL setAnimateCB(const void* value, void* clientData) {
+	g_animate = *(const int *)value;
+}
+
+void TW_CALL getAnimateCB(void* value, void* clientData) {
+	*(int *)value = g_animate;
+}
+
 void InitTwBar(TwBar *bar)
 {
 	// Create a tweak bar
 	bar = TwNewBar("TweakBar");
 	TwDefine(" GLOBAL help='This example shows how to integrate AntTweakBar with GLUT and OpenGL.' "); // Message added to the help bar.
-	TwDefine(" TweakBar size='200 800' color='0 128 255' alpha=128  "); // change default tweak bar size and color
-	TwDefine(" TweakBar  label='Visual Parameters'");        // change the title of the Tweakbar
+	TwDefine(" TweakBar position='600 0' size='200 600' color='0 128 255' alpha=128  "); // change default tweak bar size and color
+	TwDefine(" TweakBar  label='Visual Parameters'"); // change the title of the Tweakbar
 	// Add callback to toggle reference axes (callback functions are defined above).
 	TwAddVarCB(bar, "Axes", TW_TYPE_BOOL32, SetAxesCB, GetAxesCB, NULL,
 		" label='Axes' key=a help='Toggle reference axes.' ");
@@ -756,6 +909,7 @@ void InitTwBar(TwBar *bar)
 	TwAddVarRW(bar, "modifyScale", TW_TYPE_FLOAT, &SCALE, "label='Modify Scale' min=0.0001 max=5. step=0.001");
 	TwAddVarRW(bar, "modifydmax", TW_TYPE_FLOAT, &dmax, "label='Modify Texture Warping' min=0.001 max=0.01 step=0.0005");
 	TwAddVarCB(bar, "toggleArrows", TW_TYPE_BOOL32, setArrowCB, getArrowCB, NULL, "label='Toggle Arrows'");
+	TwAddVarCB(bar, "toggleAnimation", TW_TYPE_BOOL32, setAnimateCB, getAnimateCB, NULL, "label='Toggle Animation'");
 }
 
 int main(int argc, char *argv[]) {
@@ -765,7 +919,7 @@ int main(int argc, char *argv[]) {
 	// Initialize GLUT
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB | GLUT_DEPTH);
-	glutInitWindowSize(IMG_RES, IMG_RES);
+	glutInitWindowSize(900, 600);
 	MainWindow = glutCreateWindow("Final Project – IBFVS – Binoy Dalal (1794070)");
 	glutCreateMenu(NULL);
 	// Set GLUT callbacks
@@ -800,6 +954,7 @@ int main(int argc, char *argv[]) {
 	poly->average_normals();
 	poly->normalize_Field();
 	poly->calc_vector_projection();
+	calcLimits();
 	// generate noise textures
 	genNoise();
 	initFt();

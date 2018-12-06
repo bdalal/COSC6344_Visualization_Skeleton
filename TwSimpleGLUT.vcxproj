@@ -245,7 +245,6 @@ if exist bin64\glut64.dll  xcopy /y /f bin64\glut64.dll debug64\.
     <ClCompile Include="IBFVSATB_2.cpp" />
     <ClCompile Include="icVector.cpp" />
     <ClCompile Include="ply.cpp" />
-    <ClCompile Include="TwSample.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="icVector.H" />
