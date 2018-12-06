@@ -14,7 +14,7 @@ Modified by Guoning Chen 2012
 #include "icVector.H"
 //#include "icMatrix.H"
 
-
+#define DistanceThreshold 0.00001
 
 // The interface for the read from and write to PLY files
 
@@ -768,8 +768,6 @@ void Polyhedron::preprocess_vertex() {
 		vlist[i]->z = (vlist[i]->z - center.entry[2]) / radius;
 	}
 }
-
-#define DistanceThreshold 0.00001
 
 void Polyhedron::normalize_Field()
 {

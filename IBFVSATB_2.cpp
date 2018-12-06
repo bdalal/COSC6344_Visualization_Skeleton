@@ -8,6 +8,11 @@
 #include "Skeleton.h"
 
 #define NUM_SHAPES 4
+#define tmax IMG_RES / (SCALE * NOISE_RES)
+#define X 0
+#define Y 1
+#define Z 2
+#define WINGS 0.10
 
 int MainWindow;
 const int IMG_RES = 512;
@@ -27,15 +32,21 @@ static int yorder[] = { 1, 2, 3, -2, 4 };
 static float zx[] = { 1.f, 0.f, 1.f, 0.f, .25f, .75f };
 static float zy[] = { .5f, .5f, -.5f, -.5f, 0.f, 0.f };
 static int zorder[] = { 1, 2, 3, 4, -5, 6 };
+/* x, y, z, axes: */
+static float axx[3] = { 1., 0., 0. };
+static float ayy[3] = { 0., 1., 0. };
+static float azz[3] = { 0., 0., 1. };
+// Shapes material
+float g_MatAmbient[] = { 0.5f, 0.5f, 0.5f, 0.5f };
+float g_MatDiffuse[] = { 1.0f, 1.0f, 1.0f, 0.5f };
 float g_Zoom = 1.0f;
 float g_WhiteThreshold = 0.5;
 float g_Rotation[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 float g_RotateStart[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 float g_LightMultiplier = 1.0f;
 float g_LightDirection[] = { -0.57735f, -0.57735f, -0.57735f };
-float SCALE = 0.00225;
-float dmax = 0.5;
-static float tmax = 2 * IMG_RES / (1. * NOISE_RES); // texture repeat parameter
+float SCALE = 0.5;
+float dmax = 0.00225;
 int g_AutoRotate = 0;
 int g_RotateTime = 0;
 int g_CurrentShape = 0;
@@ -45,10 +56,9 @@ static int fctr = 0; // noise frame counter
 GLuint BoxList = 100;
 GLuint AxesList = 101;
 static GLuint noiseTexImg[NNoise]; // 32 noise images
-static GLuint FtTex, FsTex, FtTexA; // Ft image
+static GLuint FtTex; // Ft image
 static GLubyte noiseTex[NOISE_RES][NOISE_RES][4]; // to store a noise pattern
 static GLubyte baseTex[IMG_RES][IMG_RES][3]; // to store the base image pattern
-static GLubyte baseTexA[IMG_RES][IMG_RES][4]; // to store the base image pattern
 Polyhedron *poly;
 
 void SetQuaternionFromAxisAngle(const float *axis, float angle, float *quat)
@@ -104,7 +114,6 @@ int GetTimeMs()
 #if !defined(_WIN32)
 	return glutGet(GLUT_ELAPSED_TIME);
 #else
-	// glutGet(GLUT_ELAPSED_TIME) seems buggy on Windows
 	return (int)GetTickCount();
 #endif
 }
@@ -117,6 +126,9 @@ void clearFrame() {
 void setupDisplayParams() {
 	glShadeModel(GL_FLAT);
 	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_COLOR_MATERIAL);
+	glDisable(GL_LIGHTING);
+	glDisable(GL_LIGHT0);
 }
 
 void enableTexturing() {
@@ -144,9 +156,9 @@ void getAdvectedCoords(Vertex *v) {
 	float mat[16], p[4], pr[4];
 	glGetFloatv(GL_MODELVIEW_MATRIX, mat);
 	pr[0] = pr[1] = pr[2] = pr[3] = 0;
-	p[0] = v->x - ((v->t1 / v->t_magnitude) * (SCALE * 2));
-	p[1] = v->y - ((v->t2 / v->t_magnitude) * (SCALE * 2));
-	p[2] = v->z - ((v->t3 / v->t_magnitude) * (SCALE * 2));
+	p[0] = v->x - ((v->t1 / v->t_magnitude) * (dmax * 2));
+	p[1] = v->y - ((v->t2 / v->t_magnitude) * (dmax * 2));
+	p[2] = v->z - ((v->t3 / v->t_magnitude) * (dmax * 2));
 	p[3] = 1;
 	for (int k = 0; k < 4; k++)
 		for (int j = 0; j < 4; j++)
@@ -200,10 +212,22 @@ void readImage() {
 }
 
 void blendWithShading() {
+	float v[4];
 	clearFrame();
 	glShadeModel(GL_SMOOTH);
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, baseTex);
+	glBindTexture(GL_TEXTURE_2D, FtTex);
+	glEnable(GL_LIGHTING);
+	glEnable(GL_LIGHT0);
+	v[0] = v[1] = v[2] = g_LightMultiplier * 0.4f; v[3] = 1.0f;
+	glLightfv(GL_LIGHT0, GL_AMBIENT, v);
+	v[0] = v[1] = v[2] = g_LightMultiplier * 0.8f; v[3] = 1.0f;
+	glLightfv(GL_LIGHT0, GL_DIFFUSE, v);
+	v[0] = -g_LightDirection[0]; v[1] = -g_LightDirection[1]; v[2] = -g_LightDirection[2]; v[3] = 0.0f;
+	glLightfv(GL_LIGHT0, GL_POSITION, v);
+	// Set material
+	glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, g_MatAmbient);
+	glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, g_MatDiffuse);
 	for (int i = 0; i < poly->ntris; i++) {
 		Triangle *t = poly->tlist[i];
 		glBegin(GL_TRIANGLES);
@@ -235,6 +259,156 @@ void setScene(float mat[]) {
 	glTranslatef(-poly->center.entry[0], -poly->center.entry[1], -poly->center.entry[2]);
 }
 
+// Calculate the dot production of two vectors
+float dot(float v1[3], float v2[3])
+{
+	return(v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]);
+}
+
+// Calculate the cross production of two vectors
+void cross(float v1[3], float v2[3], float vout[3])
+{
+	float tmp[3];
+	tmp[0] = v1[1] * v2[2] - v2[1] * v1[2];
+	tmp[1] = v2[0] * v1[2] - v1[0] * v2[2];
+	tmp[2] = v1[0] * v2[1] - v2[0] * v1[1];
+	vout[0] = tmp[0];
+	vout[1] = tmp[1];
+	vout[2] = tmp[2];
+}
+
+// Normalize vector
+float unit(float vin[3], float vout[3])
+{
+	float dist, f;
+	dist = vin[0] * vin[0] + vin[1] * vin[1] + vin[2] * vin[2];
+	if (dist > 0.0)
+	{
+		dist = sqrt(dist);
+		f = 1. / dist;
+		vout[0] = f * vin[0];
+		vout[1] = f * vin[1];
+		vout[2] = f * vin[2];
+	}
+	else
+	{
+		vout[0] = vin[0];
+		vout[1] = vin[1];
+		vout[2] = vin[2];
+	}
+	return(dist);
+}
+
+// Draw the arrow
+void Arrow(float tail[3], float head[3])
+{
+	float u[3], v[3], w[3]; /* arrow coordinate system */
+	float d; /* wing distance */
+	float x, y, z; /* point to plot */
+	float mag; /* magnitude of major direction */
+	float f; /* fabs of magnitude */
+	int axis; /* which axis is the major */
+	/* set w direction in u-v-w coordinate system: */
+	w[0] = head[0] - tail[0];
+	w[1] = head[1] - tail[1];
+	w[2] = head[2] - tail[2];
+	/* determine major direction: */
+	axis = X;
+	mag = fabs(w[0]);
+	if ((f = fabs(w[1])) > mag)
+	{
+		axis = Y;
+		mag = f;
+	}
+	if ((f = fabs(w[2])) > mag)
+	{
+		axis = Z;
+		mag = f;
+	}
+	/* set size of wings and turn w into a unit vector: */
+	d = WINGS * unit(w, w);
+	/* draw the shaft of the arrow: */
+	glBegin(GL_LINE_STRIP);
+	glVertex3fv(tail);
+	glVertex3fv(head);
+	glEnd();
+	/* draw two sets of wings in the non-major directions: */
+	if (axis != X)
+	{
+		cross(w, axx, v);
+		(void)unit(v, v);
+		cross(v, w, u);
+		x = head[0] + d * (u[0] - w[0]);
+		y = head[1] + d * (u[1] - w[1]);
+		z = head[2] + d * (u[2] - w[2]);
+		glBegin(GL_LINE_STRIP);
+		glVertex3fv(head);
+		glVertex3f(x, y, z);
+		glEnd();
+		x = head[0] + d * (-u[0] - w[0]);
+		y = head[1] + d * (-u[1] - w[1]);
+		z = head[2] + d * (-u[2] - w[2]);
+		glBegin(GL_LINE_STRIP);
+		glVertex3fv(head);
+		glVertex3f(x, y, z);
+		glEnd();
+	}
+	if (axis != Y)
+	{
+		cross(w, ayy, v);
+		(void)unit(v, v);
+		cross(v, w, u);
+		x = head[0] + d * (u[0] - w[0]);
+		y = head[1] + d * (u[1] - w[1]);
+		z = head[2] + d * (u[2] - w[2]);
+		glBegin(GL_LINE_STRIP);
+		glVertex3fv(head);
+		glVertex3f(x, y, z);
+		glEnd();
+		x = head[0] + d * (-u[0] - w[0]);
+		y = head[1] + d * (-u[1] - w[1]);
+		z = head[2] + d * (-u[2] - w[2]);
+		glBegin(GL_LINE_STRIP);
+		glVertex3fv(head);
+		glVertex3f(x, y, z);
+		glEnd();
+	}
+	if (axis != Z)
+	{
+		cross(w, azz, v);
+		(void)unit(v, v);
+		cross(v, w, u);
+		x = head[0] + d * (u[0] - w[0]);
+		y = head[1] + d * (u[1] - w[1]);
+		z = head[2] + d * (u[2] - w[2]);
+		glBegin(GL_LINE_STRIP);
+		glVertex3fv(head);
+		glVertex3f(x, y, z);
+		glEnd();
+		x = head[0] + d * (-u[0] - w[0]);
+		y = head[1] + d * (-u[1] - w[1]);
+		z = head[2] + d * (-u[2] - w[2]);
+		glBegin(GL_LINE_STRIP);
+		glVertex3fv(head);
+		glVertex3f(x, y, z);
+		glEnd();
+	}
+}
+
+// Draw arrows for each vertex of object
+void drawArrows() {
+	for (int i = 0; i < poly->nverts; i++) {
+		Vertex* v = poly->vlist[i];
+		glPushMatrix();
+		float arrow_head[3] = { v->x, v->y, v->z };
+		float arrow_direct[3] = { v->t1 / v->t_magnitude, v->t2 / v->t_magnitude, v->t3 / v->t_magnitude };
+		glTranslatef(v->x, v->y, v->z);
+		glScalef(0.1, 0.1, 0.1);
+		Arrow(arrow_head, arrow_direct);
+		glPopMatrix();
+	}
+}
+
 void Display(void) {
 	float mat[16];
 
@@ -264,6 +438,10 @@ void Display(void) {
 
 	if (g_Axes)
 		glCallList(AxesList);
+
+	if (g_arrows)
+		drawArrows();
+
 	TwDraw();
 
 	glFlush();
@@ -324,13 +502,6 @@ void initFt() {
 		}
 	}
 	glBindTexture(GL_TEXTURE_2D, FtTex);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMG_RES, IMG_RES, 0, GL_RGB, GL_UNSIGNED_BYTE, baseTex);
-
-	glBindTexture(GL_TEXTURE_2D, FsTex);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -583,6 +754,7 @@ void InitTwBar(TwBar *bar)
 	}
 	TwAddSeparator(bar, " others ", NULL);
 	TwAddVarRW(bar, "modifyScale", TW_TYPE_FLOAT, &SCALE, "label='Modify Scale' min=0.0001 max=5. step=0.001");
+	TwAddVarRW(bar, "modifydmax", TW_TYPE_FLOAT, &dmax, "label='Modify Texture Warping' min=0.001 max=0.01 step=0.0005");
 	TwAddVarCB(bar, "toggleArrows", TW_TYPE_BOOL32, setArrowCB, getArrowCB, NULL, "label='Toggle Arrows'");
 }
 
@@ -617,7 +789,7 @@ int main(int argc, char *argv[]) {
 	//   required because the GLUT key event functions do not report key modifiers states.
 	TwGLUTModifiersFunc(glutGetModifiers);
 	// Load the model and data here
-	FILE *this_file = fopen("./models/sphere1.ply", "r");
+	FILE *this_file = fopen("./models/bunny1.ply", "r");
 	poly = new Polyhedron(this_file);
 	fclose(this_file);
 	poly->initialize(); // initialize everything
