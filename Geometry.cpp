@@ -827,6 +827,17 @@ void Polyhedron::average_normals()
 	}
 }
 
+void Polyhedron::calc_vector_projection() {
+	for (int i = 0; i < nverts; i++) {
+		Vertex *v = vlist[i];
+		float dot_product = (v->nx * v->normal.entry[0]) + (v->ny * v->normal.entry[1]) + (v->nz * v->normal.entry[2]);
+		v->t1 = v->nx - (dot_product * v->normal.entry[0]);
+		v->t2 = v->ny - (dot_product * v->normal.entry[1]);
+		v->t3 = v->nz - (dot_product * v->normal.entry[2]);
+		v->t_magnitude = sqrt(pow(v->t1, 2) + pow(v->t2, 2) + pow(v->t3, 2));
+	}
+}
+
 void sort(unsigned int *A, unsigned int *B, unsigned int *C, unsigned int sid, unsigned int eid) {
 	unsigned int i;
 	unsigned int *tempA, *tempB, *tempC;
