@@ -874,7 +874,7 @@ void InitTwBar(TwBar *bar)
 	// Create a tweak bar
 	bar = TwNewBar("TweakBar");
 	TwDefine(" GLOBAL help='This example shows how to integrate AntTweakBar with GLUT and OpenGL.' "); // Message added to the help bar.
-	TwDefine(" TweakBar position='600 0' size='200 600' color='0 128 255' alpha=128  "); // change default tweak bar size and color
+	TwDefine(" TweakBar position='600 0' size='300 600' color='0 128 255' alpha=128  "); // change default tweak bar size and color
 	TwDefine(" TweakBar  label='Visual Parameters'"); // change the title of the Tweakbar
 	// Add callback to toggle reference axes (callback functions are defined above).
 	TwAddVarCB(bar, "Axes", TW_TYPE_BOOL32, SetAxesCB, GetAxesCB, NULL,
