@@ -225,6 +225,8 @@ public:
 	void calc_face_normals_and_area();
 	void calc_edge_length();
 	void calc_vector_projection();
+	void normalize_Field();
+	void preprocess_vertex();
 
 	void write_file(FILE *);
 

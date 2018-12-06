@@ -761,6 +761,50 @@ void Polyhedron::calc_bounding_sphere()
 	radius = length(center - min);
 }
 
+void Polyhedron::preprocess_vertex() {
+	for (int i = 0; i < nverts; i++) {
+		vlist[i]->x = (vlist[i]->x - center.entry[0]) / radius + 0.5;
+		vlist[i]->y = (vlist[i]->y - center.entry[1]) / radius + 0.5;
+		vlist[i]->z = (vlist[i]->z - center.entry[2]) / radius;
+	}
+}
+
+#define DistanceThreshold 0.00001
+
+void Polyhedron::normalize_Field()
+{
+	int i;
+	double r;
+	Vertex *cur_v;
+	double dmax = 0.0025;
+
+	for (i = 0; i < nverts; i++)
+	{
+		cur_v = vlist[i];
+		icVector3 g_vec = icVector3(cur_v->nx, cur_v->ny, cur_v->nz);
+		r = length(g_vec);
+		r *= r;
+
+		if (r < DistanceThreshold)
+		{
+			r = DistanceThreshold;
+			g_vec *= dmax / r;
+		}
+
+		r = length(g_vec);
+		r *= r;
+
+		if (r > dmax*dmax) {
+			r = sqrt(r);
+			g_vec *= dmax / r;
+		}
+
+		cur_v->nx = g_vec.entry[0];
+		cur_v->ny = g_vec.entry[1];
+		cur_v->nz = g_vec.entry[2];
+	}
+}
+
 void Polyhedron::calc_edge_length()
 {
 	int i;
