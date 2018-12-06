@@ -33,9 +33,11 @@ public:
 	double x, y, z;
 	int angle_deficit;
 	float nx, ny, nz;
+	float t1, t2, t3;
 	int index;
 	float magnitude;
-	double tx[2];
+	float t_magnitude;
+	double tx[3];
 
 	int ntris;
 	Triangle **tris;
@@ -222,6 +224,7 @@ public:
 	void calc_bounding_sphere();
 	void calc_face_normals_and_area();
 	void calc_edge_length();
+	void calc_vector_projection();
 
 	void write_file(FILE *);
 
